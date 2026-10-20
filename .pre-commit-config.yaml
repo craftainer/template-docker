@@ -65,3 +65,50 @@ repos:
         files: ^\.devcontainer/devcontainer(-lock)?\.json$
         pass_filenames: false
         stages: [pre-commit, manual]
+
+  # template-docker's image-layer hooks (docs/TEMPLATE.md's "Image layer").
+  - repo: local
+    hooks:
+      # Official hadolint image, pinned (a regex manager in renovate.json
+      # tracks the tag); docker_image runs it with the repo mounted, so no
+      # host install is needed. Fails on warning and above, not info: the
+      # base-owned devcontainer Dockerfile trips info-level DL3066. DL3008 (pin apt
+      # package versions) is ignored: Debian drops superseded versions from
+      # the archive, so pins would break rebuilds, and the base image tag is
+      # what Renovate tracks.
+      - id: hadolint
+        name: hadolint (Dockerfile lint)
+        entry: hadolint/hadolint:v2.15.1 hadolint --failure-threshold warning --ignore DL3008
+        language: docker_image
+        files: ^(\.devcontainer/)?Dockerfile$
+        stages: [pre-commit, manual]
+
+      # The toolchain version ARGs must match between the devcontainer image
+      # and the runtime image. An instance appends its own ARG names (e.g.
+      # RUST_VERSION) to this entry.
+      - id: check-dockerfile-versions
+        name: check-dockerfile-versions (ARG defaults match across Dockerfiles)
+        entry: bash scripts/check-dockerfile-versions.sh DEBIAN_VERSION
+        language: system
+        files: ^(\.devcontainer/)?Dockerfile$
+        pass_filenames: false
+        stages: [pre-commit, manual]
+
+      # Vulnerability scan of the built image tar(s) in dist/ with Grype
+      # (pinned image; ADR 0001 / docs/TEMPLATE.md say why Grype). Manual
+      # stage only: it needs `make build` to have produced dist/*.tar and
+      # network for the vulnerability DB (cached in the grype-db volume).
+      # Skips cleanly with no tar. Fails on HIGH/CRITICAL with a fix available.
+      - id: image-scan
+        name: image-scan (Grype, HIGH/CRITICAL with a fix)
+        entry: >-
+          bash -c 'shopt -s nullglob; tars=(dist/*.tar);
+          [ "${#tars[@]}" -gt 0 ] || { echo "image-scan: no image tar in dist/, skipping"; exit 0; };
+          rc=0; for t in "${tars[@]}"; do
+          docker run --rm -e GRYPE_DB_CACHE_DIR=/cache -v grype-db:/cache
+          -v "$PWD/dist:/dist:ro" anchore/grype:v0.121.0
+          "/dist/$(basename "$t")" --only-fixed --fail-on high || rc=1; done; exit $rc' --
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [manual]

@@ -56,6 +56,41 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s*\\n\\s*(?:runs-on|runner): \\$\\{\\{ vars\\.[A-Z0-9_]+ \\|\\| '(?<currentValue>[^']+)' \\}\\}"
       ]
+    },
+    {
+      "description": "Pinned tool versions in the image-release Makefile and image.mk.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/",
+        "/^image\\.mk$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>.*?) depName=(?<depName>.*?)\\s*\\n[A-Z0-9_]+_VERSION\\s*:?=\\s*(?<currentValue>\\S+)"
+      ]
+    },
+    {
+      "description": "The hadolint image pinned in the hadolint hook.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.pre-commit-config\\.yaml$/"
+      ],
+      "matchStrings": [
+        "entry: hadolint/hadolint:(?<currentValue>\\S+) hadolint"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "hadolint/hadolint"
+    },
+    {
+      "description": "The Grype image pinned in the image-scan hook.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^\\.pre-commit-config\\.yaml$/"
+      ],
+      "matchStrings": [
+        "anchore/grype:(?<currentValue>v[0-9][^\\s]*)"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "anchore/grype"
     }
   ]
 }

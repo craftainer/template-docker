@@ -7,7 +7,9 @@
   Dockerfile/compose image tag repo-wide (scanned recursively, unlike
   Dependabot), and the `# renovate:` comment-annotated version pins in
   `.devcontainer/Dockerfile` (and an instance's top-level runtime
-  `Dockerfile`). An instance's own `renovate.json` additions cover its
+  `Dockerfile`). `Makefile` and `image.mk` `*_VERSION` pins carry the same
+  marker, and the `hadolint`/`Grype` images pinned in
+  `.pre-commit-config.yaml` have their own regex managers. An instance's own `renovate.json` additions cover its
   language's own package manifest (e.g. `pyproject.toml`, `Cargo.toml`,
   `package.json`). All patch/minor updates are grouped into a single
   weekly PR that automerges once required checks pass; all major updates

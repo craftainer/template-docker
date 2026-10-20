@@ -234,19 +234,26 @@ workflow works with no registry configured at all. When it is set:
 ## Image labels
 
 Both copies of the published image (the OCI tarball and, if configured,
-the registry push) carry the same label set, computed once by
-`docker/metadata-action`:
+the registry push) carry the same label set, computed once by the
+Makefile's `LABELS` (not by `docker/metadata-action`), so `build` and
+`publish` produce identical labels in separate `make` invocations:
 
-- Standard `org.opencontainers.image.title` / `.description` / `.url` /
-  `.source` / `.revision` (`github.sha`) / `.created` / `.version`,
-  derived from git/GitHub context.
-- `io.github.<repository_owner>.sbom` and
-  `io.github.<repository_owner>.coverage-report` — URLs to that
-  release's SBOM and `coverage.xml` assets. Namespaced under the repo
-  owner (not `org.opencontainers.image.*`, which is reserved for the
-  spec's own keys) and derived from `github.repository_owner` alone, so
-  it's one stable prefix per org across every repo/template instance
-  that org owns, rather than a per-repo namespace to look up each time.
+- `org.opencontainers.image.title` (the repository name), `.source` and
+  `.url` (the repository), `.version` (`RELEASE_VERSION`), `.revision`
+  (`git rev-parse HEAD`), `.created` (the commit time, not the build
+  time, so rebuilds are reproducible), and `.licenses` (`OCI_LICENSE`,
+  default `GPL-3.0-or-later`).
+- `org.opencontainers.image.description`, only when the instance sets
+  `OCI_DESCRIPTION` in `image.mk` (the Makefile has no offline source
+  for the repository description).
+- `io.github.<repository_owner>.sbom` — the URL of that release's SPDX
+  SBOM asset. Namespaced under the repo owner (not
+  `org.opencontainers.image.*`, which is reserved for the spec's own
+  keys) and derived from the repository owner alone, so it's one stable
+  prefix per org across every repo/template instance that org owns.
+- `io.github.<repository_owner>.coverage-report`, only when the instance
+  sets `COVERAGE_REPORT` in `image.mk` to the release asset's name.
+- Whatever the instance adds through `EXTRA_LABELS`.
 
 ## Release variables and secrets
 
