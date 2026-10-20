@@ -26,6 +26,9 @@ ENV SSL_CERT_FILE=${SSL_CERT_FILE} \
     SSL_CERT_DIR=${SSL_CERT_DIR} \
     DEBIAN_FRONTEND=noninteractive
 
+# Debian mirrors drop superseded package versions, so pinning one breaks
+# rebuilds; the base image tag is pinned instead.
+# hadolint ignore=DL3008
 RUN apt-get update \
     && apt-get install -y --no-install-recommends busybox-static \
     && rm -rf /var/lib/apt/lists/*

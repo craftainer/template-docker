@@ -260,8 +260,10 @@ in its `.pre-commit-config.yaml`; ARGs not listed aren't checked.
 
 - `hadolint` lints both Dockerfiles, run from the pinned official image
   (so it needs Docker). It fails on warnings and above, not on info-level
-  findings, and ignores DL3008 (pinning apt package versions): Debian
-  drops superseded versions from its archive, so pins break rebuilds.
+  findings, and has no repo-wide ignores. An instance that must
+  install an unpinned apt package adds a per-line
+  `# hadolint ignore=DL3008` with a reason (as the skeleton `Dockerfile`
+  does: Debian drops superseded versions, so pins break rebuilds).
 - `image-scan` runs only at the `manual` stage, because it needs
   `dist/*.tar` from `make build` and network access for the vulnerability
   database. With no tar it skips. Otherwise it runs a pinned Grype image

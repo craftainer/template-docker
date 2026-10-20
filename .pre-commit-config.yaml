@@ -72,13 +72,12 @@ repos:
       # Official hadolint image, pinned (a regex manager in renovate.json
       # tracks the tag); docker_image runs it with the repo mounted, so no
       # host install is needed. Fails on warning and above, not info: the
-      # base-owned devcontainer Dockerfile trips info-level DL3066. DL3008 (pin apt
-      # package versions) is ignored: Debian drops superseded versions from
-      # the archive, so pins would break rebuilds, and the base image tag is
-      # what Renovate tracks.
+      # base-owned devcontainer Dockerfile trips info-level DL3066. There is no repo-wide
+      # DL3008 (pin apt package versions) ignore: where a pin would break rebuilds, add a
+      # per-line `# hadolint ignore=DL3008` with a reason.
       - id: hadolint
         name: hadolint (Dockerfile lint)
-        entry: hadolint/hadolint:v2.15.1 hadolint --failure-threshold warning --ignore DL3008
+        entry: hadolint/hadolint:v2.15.1 hadolint --failure-threshold warning
         language: docker_image
         files: ^(\.devcontainer/)?Dockerfile$
         stages: [pre-commit, manual]
