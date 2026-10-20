@@ -32,7 +32,8 @@ the three app templates.
   `Dockerfile` is a skeleton the instance owns (`ignore`); `.dockerignore`
   is `merge`.
 - It adds the `hadolint`, `check-dockerfile-versions` and `image-scan`
-  hooks (the last at the `manual` stage, using Grype) and Renovate
+  hooks (the last at the `manual` stage, using Trivy, pinned by tag and digest because of the March 2026
+  compromise of its releases, GHSA-69fq-xp46-6x23) and Renovate
   coverage for the Makefile pins and the hook images.
 - OCI labels follow `template-fastapi`'s ADR-0014; the image name derives
   from `GITHUB_REPOSITORY`; registry auth stays the opt-in `OCI_REGISTRY*`

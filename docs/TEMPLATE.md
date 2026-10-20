@@ -266,15 +266,23 @@ in its `.pre-commit-config.yaml`; ARGs not listed aren't checked.
   does: Debian drops superseded versions, so pins break rebuilds).
 - `image-scan` runs only at the `manual` stage, because it needs
   `dist/*.tar` from `make build` and network access for the vulnerability
-  database. With no tar it skips. Otherwise it runs a pinned Grype image
-  on each tar and fails on HIGH or CRITICAL findings that have a fix
-  (`--only-fixed --fail-on high`). The database is cached in the
-  `grype-db` Docker volume. Grype is Apache-2.0, actively maintained,
-  reads a Docker or OCI archive directly and has no published supply-chain
-  incident; Trivy, the alternative, had one in March 2026
-  (GHSA-69fq-xp46-6x23) and a crafted-database path-traversal advisory
-  (GHSA-mcj4-mphf-j9ff). Both licences are compatible with invoking them
-  as tools.
+  database. With no tar it skips. Otherwise it runs a pinned Trivy image
+  on each tar (`trivy image --input`) and fails on HIGH or CRITICAL
+  findings that have a fix (`--severity HIGH,CRITICAL --ignore-unfixed
+  --exit-code 1`). The database is cached in the `trivy-cache` Docker
+  volume. Trivy is Apache-2.0, so invoking it as a tool is compatible
+  with this repo's GPL-3.0 licence. The scanner is the maintainers'
+  choice, made over Grype. Trivy's releases and Docker Hub images were
+  compromised in March 2026 (GHSA-69fq-xp46-6x23), so the image is pinned
+  by digest as well as tag (`aquasec/trivy:<version>@sha256:…`); the
+  advisory lists images referenced by digest as unaffected. Renovate
+  updates tag and digest together. When bumping by hand, take the digest
+  from the registry and verify it with cosign as the advisory describes:
+  `cosign verify --certificate-identity-regexp
+  'https://github\.com/aquasecurity/' --certificate-oidc-issuer
+  'https://token.actions.githubusercontent.com'
+  ghcr.io/aquasecurity/trivy@sha256:…` (the Docker Hub, GHCR and ECR
+  digests of a release are identical).
 
 ### Re-parenting an existing app onto template-docker
 

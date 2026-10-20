@@ -81,16 +81,16 @@
       "depNameTemplate": "hadolint/hadolint"
     },
     {
-      "description": "The Grype image pinned in the image-scan hook.",
+      "description": "The Trivy image pinned by tag and digest in the image-scan hook; Renovate updates both.",
       "customType": "regex",
       "managerFilePatterns": [
         "/^\\.pre-commit-config\\.yaml$/"
       ],
       "matchStrings": [
-        "anchore/grype:(?<currentValue>v[0-9][^\\s]*)"
+        "aquasec/trivy:(?<currentValue>[0-9][^@\\s]*)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
       "datasourceTemplate": "docker",
-      "depNameTemplate": "anchore/grype"
+      "depNameTemplate": "aquasec/trivy"
     }
   ]
 }
