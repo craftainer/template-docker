@@ -1,7 +1,8 @@
 # scripts/runner-setup.d/
 
-Instance hook directory for the runner stage of the top-level
-`Dockerfile`. `../runner-setup.sh` (template-owned, `replace` tier) creates
+Optional instance hook directory for the runner stage of the top-level
+`Dockerfile`; an instance whose runner image doesn't call `../runner-setup.sh`
+(template-react's nginx runner, say) leaves it empty and unused. `../runner-setup.sh` (template-owned, `replace` tier) creates
 the group-0 runtime user, makes the home directory and `/app/data`
 group-writable (and nothing else under `/app`), then runs every `*.sh` here in glob order as
 `bash NN-name.sh APP_UID`, still as root, in the same `RUN` layer.

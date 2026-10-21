@@ -12,6 +12,9 @@
 # layer) and the runtime user can't modify it. Other writable directories
 # (caches, upload dirs) are created by runner-setup.d hooks.
 #
+# Optional: an instance whose runner image needs no such user (an nginx runner
+# with its own non-root user) never calls this script.
+#
 # Usage: runner-setup.sh APP_UID
 #
 # Afterwards runs every runner-setup.d/*.sh next to this script, in glob

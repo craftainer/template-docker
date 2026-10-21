@@ -7,7 +7,10 @@
 #
 # What gets published is the tar `build` wrote to dist/ -- the one `sbom`
 # described and `image-smoke` ran -- copied to the registry with skopeo
-# rather than rebuilt, so the registry digest is the tested artifact's.
+# rather than rebuilt, so the registry digest is the tested artifact's. The
+# copy is `--all`: the tar's whole index (the image for RELEASE_ARCH plus any
+# buildx attestation manifests: provenance and SBOM) is pushed, whatever the
+# host's arch, so a non-native RELEASE_ARCH works and attestations survive.
 # `created` is the commit time, so rebuilding the same commit yields the same
 # labels; layer contents are not guaranteed bit-for-bit reproducible.
 
@@ -39,9 +42,10 @@ SKOPEO_IMAGE := quay.io/skopeo/stable:v1.22.3-immutable@sha256:c0ee1f4edca5c01cb
 
 # owner/repo: GITHUB_REPOSITORY in CI; inside the devcontainer (where
 # release-check runs) it is unset, so derive it from the origin remote
-# (ssh, scp-like and https forms, with or without credentials and .git);
+# (ssh://[user@]host[:PORT]/o/r, scp-like and https forms, with or without
+# credentials and .git; scripts/test-image-scripts.sh checks them);
 # the directory name is the last resort.
-REPO := $(or $(GITHUB_REPOSITORY),$(shell git remote get-url origin 2>/dev/null | sed -E 's|^[a-z+]+://([^@/]*@)?([^/:]+):[0-9]+/|\2/|; s|^[a-z+]+://||; s|^[^@/]*@||; s|^[^/:]+[:/]||; s|/$$||; s|\.git$$||'),$(notdir $(CURDIR)))
+REPO := $(or $(GITHUB_REPOSITORY),$(shell git remote get-url origin 2>/dev/null | sed -E 's|^[A-Za-z][A-Za-z0-9+.-]*://([^@/]*@)?([^/:]+):[0-9]+/|\2/|; s|^[A-Za-z][A-Za-z0-9+.-]*://||; s|^[^@/]*@||; s|^[^/:]+[:/]||; s|/$$||; s|\.git$$||'),$(notdir $(CURDIR)))
 OWNER := $(firstword $(subst /, ,$(REPO)))
 IMAGE := $(notdir $(REPO))
 ASSET_PREFIX := dist/$(IMAGE)-$(RELEASE_VERSION)
@@ -54,7 +58,7 @@ OCI_NAME = $(shell printf '%s' '$(or $(OCI_IMAGE_NAME),$(REPO))' | tr '[:upper:]
 export OCI_DESCRIPTION
 export IMAGE_SMOKE_RUN_ARGS IMAGE_SMOKE_PORT IMAGE_SMOKE_PATH IMAGE_SMOKE_TIMEOUT RELEASE_VERSION
 export IMAGE_TAR_PREFIX = $(ASSET_PREFIX)
-export SKOPEO_IMAGE
+export SKOPEO_IMAGE ARCHES
 
 # Only set in CI, by crazy-max/ghaction-github-runtime in release.yml.
 ifdef ACTIONS_RUNTIME_TOKEN
@@ -101,10 +105,12 @@ sbom: check-arch
 release-assets: check-arch image-smoke
 	test -f $(ASSET).tar && test -f $(ASSET).spdx.json
 
-# Copies the tested tar from dist/ to the registry (skopeo copy
-# oci-archive:... docker://...), records the pushed manifest digest in
+# Copies the tested tar from dist/ to the registry (skopeo copy --all
+# oci-archive:... docker://...), records the pushed index digest in
 # dist/<asset>.digest for finalize, and logs in through a throwaway authfile
-# so the password never appears in a command line.
+# so the password never appears in a command line. Without --all skopeo
+# copies one image chosen by the host's platform, which can fail or pick the
+# wrong image for a non-native RELEASE_ARCH, and it drops the attestations.
 publish: check-arch
 ifeq ($(OCI_REGISTRY),)
 	@echo "OCI_REGISTRY not set -- skipping publish."
@@ -114,7 +120,7 @@ else
 	printf '%s' "$$OCI_REGISTRY_PASSWORD" | bash scripts/skopeo.sh -i -v "$$auth:/auth" -- \
 		login --authfile /auth/auth.json -u "$$OCI_REGISTRY_USERNAME" --password-stdin "$(OCI_REGISTRY)" && \
 	bash scripts/skopeo.sh -v "$$auth:/auth:ro" -- \
-		copy --authfile /auth/auth.json --digestfile /$(ASSET).digest \
+		copy --all --authfile /auth/auth.json --digestfile /$(ASSET).digest \
 		oci-archive:/$(ASSET).tar docker://$(OCI_REGISTRY)/$(OCI_NAME):$(RELEASE_VERSION)-$(RELEASE_ARCH)
 endif
 
@@ -128,14 +134,19 @@ image-smoke:
 # inside the devcontainer, with the instance's backing services up.
 release-check: image-smoke
 
-# One manifest list over the per-arch digests publish recorded, so it
-# references exactly the images that were tested and pushed. Logs in with a
-# throwaway DOCKER_CONFIG so the password isn't left in ~/.docker/config.json.
+# One manifest list over the per-arch digests publish recorded (each an
+# index of image + attestations; imagetools create merges their manifests),
+# so it references exactly the images that were tested and pushed. Logs in
+# with a throwaway DOCKER_CONFIG so the password isn't left in
+# ~/.docker/config.json. The Docker CLI looks for plugins in
+# $DOCKER_CONFIG/cli-plugins, so a user-installed buildx would vanish with
+# the swap: the user's cli-plugins directory is linked into the throwaway one.
 finalize:
 ifeq ($(OCI_REGISTRY),)
 	@echo "OCI_REGISTRY not set -- no manifest list to create."
 else
-	@export DOCKER_CONFIG="$$(mktemp -d)" && trap 'rm -rf "$$DOCKER_CONFIG"' EXIT && \
+	@orig="$${DOCKER_CONFIG:-$$HOME/.docker}" && export DOCKER_CONFIG="$$(mktemp -d)" && trap 'rm -rf "$$DOCKER_CONFIG"' EXIT && \
+	if [ -d "$$orig/cli-plugins" ]; then ln -s "$$orig/cli-plugins" "$$DOCKER_CONFIG/cli-plugins"; fi && \
 	printf '%s' "$$OCI_REGISTRY_PASSWORD" | docker login "$(OCI_REGISTRY)" -u "$$OCI_REGISTRY_USERNAME" --password-stdin && \
 	srcs="" && for a in $(ARCHES); do \
 		d="$$(cat dist/$(IMAGE)-$(RELEASE_VERSION)-$$a.digest)" || exit 1; \
