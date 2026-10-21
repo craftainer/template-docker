@@ -91,6 +91,7 @@ replace:
   - scripts/runner-setup.d/README.md
   - scripts/check-dockerfile-versions.sh
   - scripts/image-scan.sh
+  - scripts/skopeo.sh
 
 ignore:
   # Each instance chooses its own license and copyright holder.

@@ -18,8 +18,13 @@
 - `image-scan.sh` — the manual-stage `image-scan` hook: Trivy over the
   tars in `dist/`.
 - `image-smoke.sh` — `make image-smoke` (a `release-check` prerequisite):
-  loads the release image tar from `dist/`, runs it and polls
-  `IMAGE_SMOKE_PATH` until 2xx; usage in the script's header.
+  converts the arch's image in the release OCI tar from `dist/` to a
+  docker-archive with the pinned skopeo (`docker load` can't read a buildx
+  OCI tar on the classic image store), loads and runs it, and polls
+  `IMAGE_SMOKE_PATH` until 2xx. Needs `SKOPEO_IMAGE`, which the Makefile
+  exports; usage in the script's header.
+- `skopeo.sh` — runs the pinned skopeo image as the caller's user with
+  `dist/` mounted at `/dist`; used by `make publish` and `image-smoke.sh`.
 - `check-dockerfile-versions.sh ARG...` — fails when a named `ARG` default
   differs between `.devcontainer/Dockerfile` and the top-level `Dockerfile`.
 

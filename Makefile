@@ -54,6 +54,7 @@ OCI_NAME = $(shell printf '%s' '$(or $(OCI_IMAGE_NAME),$(REPO))' | tr '[:upper:]
 export OCI_DESCRIPTION
 export IMAGE_SMOKE_RUN_ARGS IMAGE_SMOKE_PORT IMAGE_SMOKE_PATH IMAGE_SMOKE_TIMEOUT RELEASE_VERSION
 export IMAGE_TAR_PREFIX = $(ASSET_PREFIX)
+export SKOPEO_IMAGE
 
 # Only set in CI, by crazy-max/ghaction-github-runtime in release.yml.
 ifdef ACTIONS_RUNTIME_TOKEN
@@ -110,10 +111,10 @@ ifeq ($(OCI_REGISTRY),)
 else
 	@test -f $(ASSET).tar || { echo "$(ASSET).tar not found; run 'make build' first." >&2; exit 1; }
 	@auth="$$(mktemp -d)" && trap 'rm -rf "$$auth"' EXIT && \
-	printf '%s' "$$OCI_REGISTRY_PASSWORD" | docker run --rm -i --user "$$(id -u):$$(id -g)" -e HOME=/tmp -v "$$auth:/auth" \
-		$(SKOPEO_IMAGE) login --authfile /auth/auth.json -u "$$OCI_REGISTRY_USERNAME" --password-stdin "$(OCI_REGISTRY)" && \
-	docker run --rm --user "$$(id -u):$$(id -g)" -e HOME=/tmp -v "$$auth:/auth:ro" -v "$(CURDIR)/dist:/dist" \
-		$(SKOPEO_IMAGE) copy --authfile /auth/auth.json --digestfile /$(ASSET).digest \
+	printf '%s' "$$OCI_REGISTRY_PASSWORD" | bash scripts/skopeo.sh -i -v "$$auth:/auth" -- \
+		login --authfile /auth/auth.json -u "$$OCI_REGISTRY_USERNAME" --password-stdin "$(OCI_REGISTRY)" && \
+	bash scripts/skopeo.sh -v "$$auth:/auth:ro" -- \
+		copy --authfile /auth/auth.json --digestfile /$(ASSET).digest \
 		oci-archive:/$(ASSET).tar docker://$(OCI_REGISTRY)/$(OCI_NAME):$(RELEASE_VERSION)-$(RELEASE_ARCH)
 endif
 
