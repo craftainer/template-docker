@@ -12,8 +12,11 @@
   directories, empty apart from their own `README.md`; see
   `docs/TEMPLATE.md`'s "Instance extension points".
 - `runner-setup.sh` — the top-level `Dockerfile`'s `runner` stage setup:
-  group-0 runtime user for arbitrary-UID platforms, then every
+  group-0 runtime user for arbitrary-UID platforms (run before copying
+  app code, which is then copied read-only), then every
   `runner-setup.d/*.sh`.
+- `image-scan.sh` — the manual-stage `image-scan` hook: Trivy over the
+  tars in `dist/`.
 - `image-smoke.sh` — `make image-smoke` (a `release-check` prerequisite):
   loads the release image tar from `dist/`, runs it and polls
   `IMAGE_SMOKE_PATH` until 2xx; usage in the script's header.

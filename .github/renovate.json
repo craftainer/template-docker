@@ -93,13 +93,13 @@
       "depNameTemplate": "hadolint/hadolint"
     },
     {
-      "description": "The Trivy image pinned by tag and digest in the image-scan hook; Renovate updates both.",
+      "description": "The Trivy image pinned by tag and digest in scripts/image-scan.sh; Renovate updates both.",
       "customType": "regex",
       "managerFilePatterns": [
-        "/^\\.pre-commit-config\\.yaml$/"
+        "/^scripts/image-scan\\.sh$/"
       ],
       "matchStrings": [
-        "aquasec/trivy:(?<currentValue>[0-9][^@\\s]*)@(?<currentDigest>sha256:[a-f0-9]{64})"
+        "trivy=aquasec/trivy:(?<currentValue>[0-9][^@\\s]*)@(?<currentDigest>sha256:[a-f0-9]{64})"
       ],
       "datasourceTemplate": "docker",
       "depNameTemplate": "aquasec/trivy"

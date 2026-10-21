@@ -8,8 +8,9 @@
   Dependabot), and the `# renovate:` comment-annotated version pins in
   `.devcontainer/Dockerfile` (and an instance's top-level runtime
   `Dockerfile`). `Makefile` and `image.mk` `*_VERSION` pins carry the same
-  marker, and the `hadolint`/Trivy images pinned in
-  `.pre-commit-config.yaml` have their own regex managers. An instance's own `renovate.json` additions cover its
+  marker; the hadolint image in `.pre-commit-config.yaml`, the Trivy
+  image in `scripts/image-scan.sh` and the skopeo image in the `Makefile`
+  (the last two by tag and digest) have their own regex managers. An instance's own `renovate.json` additions cover its
   language's own package manifest (e.g. `pyproject.toml`, `Cargo.toml`,
   `package.json`). All patch/minor updates are grouped into a single
   weekly PR that automerges once required checks pass; all major updates

@@ -10,7 +10,9 @@
 #   RELEASE_VERSION      if that tar is missing (the image name may differ
 #                        when the repository name can't be derived), the one
 #                        dist/*-$RELEASE_VERSION-<arch>.tar is used instead
-#   RELEASE_ARCH         arch to test; default: the host's, else amd64
+#   RELEASE_ARCH         arch to test; default: the host's. Unset and no tar
+#                        for that arch: print a notice and exit 0 (the
+#                        per-arch run in the build job already covered it)
 #   IMAGE_SMOKE_PORT     container port (default 8000)
 #   IMAGE_SMOKE_PATH     URL path (default /health/live)
 #   IMAGE_SMOKE_RUN_ARGS extra `docker run` words, whitespace-separated and
@@ -30,9 +32,6 @@ case "$(uname -m)" in
     *) host_arch=amd64 ;;
 esac
 arch="${RELEASE_ARCH:-$host_arch}"
-if [[ -z "${RELEASE_ARCH:-}" && ! -f "$prefix-$arch.tar" ]]; then
-    arch=amd64
-fi
 tar="$prefix-$arch.tar"
 if [[ ! -f "$tar" && -n "${RELEASE_VERSION:-}" ]]; then
     shopt -s nullglob
@@ -41,12 +40,23 @@ if [[ ! -f "$tar" && -n "${RELEASE_VERSION:-}" ]]; then
         tar="${candidates[0]}"
     fi
 fi
-[[ -f "$tar" ]] || { echo "image-smoke: $tar not found; run 'make build' first." >&2; exit 1; }
+if [[ ! -f "$tar" ]]; then
+    if [[ -z "${RELEASE_ARCH:-}" ]]; then
+        echo "image-smoke: no $arch image in $(dirname "$prefix") for this host; the per-arch smoke already ran in the build job. Skipping."
+        exit 0
+    fi
+    echo "image-smoke: $tar not found; run 'make build' first." >&2
+    exit 1
+fi
 
 echo "image-smoke: loading $tar"
 loaded="$(docker load -i "$tar")"
 echo "$loaded"
-image="${loaded##*: }"
+loaded_ref="${loaded##*: }"
+# Run (and later remove) a private reference, so cleanup never touches an
+# image that already existed under the loaded name.
+image="image-smoke-$RANDOM$RANDOM"
+docker tag "$loaded_ref" "$image"
 
 cid=""
 # shellcheck disable=SC2329  # invoked by the EXIT trap below
@@ -59,7 +69,7 @@ cleanup() {
         fi
         docker rm -f "$cid" >/dev/null 2>&1 || true
     fi
-    docker image rm -f "$image" >/dev/null 2>&1 || true
+    docker image rm "$image" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 

@@ -41,7 +41,7 @@ SKOPEO_IMAGE := quay.io/skopeo/stable:v1.22.3-immutable@sha256:c0ee1f4edca5c01cb
 # release-check runs) it is unset, so derive it from the origin remote
 # (ssh, scp-like and https forms, with or without credentials and .git);
 # the directory name is the last resort.
-REPO := $(or $(GITHUB_REPOSITORY),$(shell git remote get-url origin 2>/dev/null | sed -E 's|^[a-z+]+://||; s|^[^@/]*@||; s|^[^/:]+[:/]||; s|\.git$$||; s|/$$||'),$(notdir $(CURDIR)))
+REPO := $(or $(GITHUB_REPOSITORY),$(shell git remote get-url origin 2>/dev/null | sed -E 's|^[a-z+]+://([^@/]*@)?([^/:]+):[0-9]+/|\2/|; s|^[a-z+]+://||; s|^[^@/]*@||; s|^[^/:]+[:/]||; s|/$$||; s|\.git$$||'),$(notdir $(CURDIR)))
 OWNER := $(firstword $(subst /, ,$(REPO)))
 IMAGE := $(notdir $(REPO))
 ASSET_PREFIX := dist/$(IMAGE)-$(RELEASE_VERSION)
@@ -128,15 +128,17 @@ image-smoke:
 release-check: image-smoke
 
 # One manifest list over the per-arch digests publish recorded, so it
-# references exactly the images that were tested and pushed.
+# references exactly the images that were tested and pushed. Logs in with a
+# throwaway DOCKER_CONFIG so the password isn't left in ~/.docker/config.json.
 finalize:
 ifeq ($(OCI_REGISTRY),)
 	@echo "OCI_REGISTRY not set -- no manifest list to create."
 else
-	@printf '%s' "$$OCI_REGISTRY_PASSWORD" | docker login "$(OCI_REGISTRY)" -u "$$OCI_REGISTRY_USERNAME" --password-stdin
-	@srcs=""; for a in $(ARCHES); do \
+	@export DOCKER_CONFIG="$$(mktemp -d)" && trap 'rm -rf "$$DOCKER_CONFIG"' EXIT && \
+	printf '%s' "$$OCI_REGISTRY_PASSWORD" | docker login "$(OCI_REGISTRY)" -u "$$OCI_REGISTRY_USERNAME" --password-stdin && \
+	srcs="" && for a in $(ARCHES); do \
 		d="$$(cat dist/$(IMAGE)-$(RELEASE_VERSION)-$$a.digest)" || exit 1; \
 		srcs="$$srcs $(OCI_REGISTRY)/$(OCI_NAME)@$$d"; \
-	done; \
+	done && \
 	docker buildx imagetools create --tag $(OCI_REGISTRY)/$(OCI_NAME):$(RELEASE_VERSION) $$srcs
 endif

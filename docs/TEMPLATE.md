@@ -191,7 +191,8 @@ these files over base:
 | `Dockerfile` | `ignore` | skeleton to replace: `builder` and `runner` stages, `ARG DEBIAN_VERSION`, `ARG APP_UID`, SSL ARGs, `APP_VERSION`/`APP_COMMIT` |
 | `.dockerignore` | `merge` | baseline build-context excludes; the instance appends its own |
 | `scripts/image-smoke.sh` | `replace` | loads the image tar from `dist/`, runs it and polls a URL |
-| `scripts/runner-setup.sh` | `replace` | creates the group-0 runtime user for the `runner` stage |
+| `scripts/runner-setup.sh` | `replace` | creates the group-0 runtime user and its writable directories for the `runner` stage |
+| `scripts/image-scan.sh` | `replace` | the Trivy scan the `image-scan` hook runs |
 | `scripts/runner-setup.d/*.sh` | `ignore` | the instance's runner-stage hooks |
 | `scripts/check-dockerfile-versions.sh` | `replace` | the version-ARG consistency check |
 
@@ -249,15 +250,23 @@ instance-tests:
 natively on its own runner in the build job before `publish`; the
 `release-check` run inside the devcontainer smoke-tests the host arch
 again with the backing services up. `image-smoke` reads `IMAGE_TAR_PREFIX` (set by the Makefile), the arch
-from `RELEASE_ARCH` (else the host's, else `amd64`), maps a random host
-port to `IMAGE_SMOKE_PORT`, prints the container logs on failure and
-always removes the container.
+from `RELEASE_ARCH` (else the host's; if `RELEASE_ARCH` is unset and
+there is no tar for the host arch, it prints a notice and exits 0, since
+the per-arch run already covered that arch), maps a random host port to
+`IMAGE_SMOKE_PORT`, prints the container logs on failure and always
+removes the container and the private `image-smoke-*` tag it created
+(never an image that existed before).
 
 ### Runner setup hook
 
-`scripts/runner-setup.sh` creates the user (UID `APP_UID`, group 0) and
-makes `/app` and its home group-writable, so the image also runs under an
-arbitrary UID (OpenShift's restricted SCC). It then runs every
+`scripts/runner-setup.sh` creates the user (UID `APP_UID`, group 0), makes
+its home and `/app/data` group-writable, and leaves `/app` root-owned, so
+the image also runs under an arbitrary UID (OpenShift's restricted SCC).
+Run it **before** copying app code, then copy the code after it with
+`COPY --chown=<uid>:0 --chmod=u=rX,g=rX,o=` (0550 directories, 0440
+files): only data and cache directories are writable, the runtime user
+can't modify what it runs, and no recursive `chgrp`/`chmod` duplicates
+the files into another layer. It then runs every
 `scripts/runner-setup.d/*.sh` in glob order as `bash NN-name.sh APP_UID`,
 still as root and in the same `RUN` layer. The instance puts extra
 packages and writable directories there instead of editing the script.
@@ -282,10 +291,13 @@ in its `.pre-commit-config.yaml`; ARGs not listed aren't checked.
   does: Debian drops superseded versions, so pins break rebuilds).
 - `image-scan` runs only at the `manual` stage, because it needs
   `dist/*.tar` from `make build` and network access for the vulnerability
-  database. With no tar it skips. Otherwise it runs a pinned Trivy image
-  on each tar (`trivy image --input`) and fails on HIGH or CRITICAL
+  database. With no tar it skips. Otherwise `scripts/image-scan.sh` runs a
+  pinned Trivy image on each tar and fails on HIGH or CRITICAL
   findings that have a fix (`--severity HIGH,CRITICAL --ignore-unfixed
-  --exit-code 1`). The database is cached in the `trivy-cache` Docker
+  --exit-code 1`). Trivy can't read the OCI-layout tar `make build`
+  writes, so the script unpacks it and scans the directory, selecting
+  `linux/<arch>` from the tar's name so a buildx attestation manifest is
+  never scanned instead of the image. The database is cached in the `trivy-cache` Docker
   volume. Trivy is Apache-2.0, so invoking it as a tool is compatible
   with this repo's GPL-3.0 licence. The scanner is the maintainers'
   choice, made over Grype. Trivy's releases and Docker Hub images were

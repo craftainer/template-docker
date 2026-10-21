@@ -90,6 +90,7 @@ replace:
   - scripts/runner-setup.sh
   - scripts/runner-setup.d/README.md
   - scripts/check-dockerfile-versions.sh
+  - scripts/image-scan.sh
 
 ignore:
   # Each instance chooses its own license and copyright holder.

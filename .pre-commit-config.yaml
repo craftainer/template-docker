@@ -94,23 +94,12 @@ repos:
         stages: [pre-commit, manual]
 
       # Vulnerability scan of the built image tar(s) in dist/ with Trivy
-      # (ADR 0001). Manual stage only: it needs `make build` to have produced
-      # dist/*.tar and network for the vulnerability DB (cached in the
-      # trivy-cache volume). Skips cleanly with no tar. Fails on HIGH/CRITICAL
-      # findings that have a fix. The image is pinned by digest as well as
-      # tag, as the mitigation for the March 2026 compromise of Trivy's
-      # releases and images (GHSA-69fq-xp46-6x23); Renovate bumps both
-      # together.
+      # (ADR 0001; the Trivy pin and why are in scripts/image-scan.sh).
+      # Manual stage only: it needs `make build` to have produced dist/*.tar
+      # and network for the vulnerability DB. Skips cleanly with no tar.
       - id: image-scan
         name: image-scan (Trivy, HIGH/CRITICAL with a fix)
-        entry: >-
-          bash -c 'shopt -s nullglob; tars=(dist/*.tar);
-          [ "${#tars[@]}" -gt 0 ] || { echo "image-scan: no image tar in dist/, skipping"; exit 0; };
-          rc=0; for t in "${tars[@]}"; do
-          docker run --rm -v trivy-cache:/root/.cache
-          -v "$PWD/dist:/dist:ro" aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222
-          image --input "/dist/$(basename "$t")" --severity HIGH,CRITICAL
-          --ignore-unfixed --exit-code 1 || rc=1; done; exit $rc' --
+        entry: bash scripts/image-scan.sh
         language: system
         pass_filenames: false
         always_run: true
