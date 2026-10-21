@@ -92,6 +92,7 @@ replace:
   - scripts/check-dockerfile-versions.sh
   - scripts/image-scan.sh
   - scripts/skopeo.sh
+  - scripts/test-image-scripts.sh
 
 ignore:
   # Each instance chooses its own license and copyright holder.
