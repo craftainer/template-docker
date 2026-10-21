@@ -27,10 +27,13 @@
 # io.github.<owner>.coverage-report label at; label omitted while empty.
 # COVERAGE_REPORT := coverage.xml
 
-# `make release-check` runs image-smoke: it loads dist/'s image tar, runs it
-# and polls this URL until 2xx.
+# image-smoke loads dist/'s image tar, runs it and polls this URL until 2xx.
+# `make release-assets` runs it for RELEASE_ARCH (each arch on its own native
+# runner, before publish); `make release-check` runs it for the host arch.
 # IMAGE_SMOKE_PORT := 8000
 # IMAGE_SMOKE_PATH := /health/live
+# Extra `docker run` words: whitespace-separated, no embedded spaces or
+# quotes (it reaches the script through the environment).
 # IMAGE_SMOKE_RUN_ARGS := -e DATABASE_URL=sqlite:///tmp/x
 # IMAGE_SMOKE_TIMEOUT := 60
 

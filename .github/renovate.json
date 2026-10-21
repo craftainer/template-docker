@@ -69,6 +69,18 @@
       ]
     },
     {
+      "description": "The skopeo image pinned by tag and digest in the Makefile; Renovate updates both.",
+      "customType": "regex",
+      "managerFilePatterns": [
+        "/^Makefile$/"
+      ],
+      "matchStrings": [
+        "SKOPEO_IMAGE := quay\\.io/skopeo/stable:(?<currentValue>v[0-9][^@\\s]*)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ],
+      "datasourceTemplate": "docker",
+      "depNameTemplate": "quay.io/skopeo/stable"
+    },
+    {
       "description": "The hadolint image pinned in the hadolint hook.",
       "customType": "regex",
       "managerFilePatterns": [

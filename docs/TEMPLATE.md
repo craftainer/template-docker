@@ -203,21 +203,34 @@ defaults) and every variable is `?=`, so set them in `image.mk`:
 | Variable | Default | Meaning |
 |---|---|---|
 | `DOCKERFILE`, `TARGET` | `Dockerfile`, `runner` | build file and stage |
-| `ARCHES` | `amd64 arm64` | space-separated; `release-arches` prints it as a JSON array and `finalize` merges one tag per arch |
+| `ARCHES` | `amd64 arm64` | space-separated; `release-arches` prints it as a JSON array and `finalize` merges the per-arch images into one tag; must not be empty |
 | `BUILD_ARGS` | empty | full flag words, e.g. `--build-arg APP_VERSION=$(RELEASE_VERSION)` |
 | `EXTRA_LABELS` | empty | full flag words, e.g. `--label k=v` |
 | `OCI_DESCRIPTION` | empty | `org.opencontainers.image.description`; the label is omitted while empty |
 | `OCI_LICENSE` | `GPL-3.0-or-later` | SPDX id for `org.opencontainers.image.licenses` |
 | `COVERAGE_REPORT` | empty | release asset name for the `io.github.<owner>.coverage-report` label; omitted while empty |
 | `IMAGE_SMOKE_PORT`, `IMAGE_SMOKE_PATH` | `8000`, `/health/live` | URL polled for a 2xx |
-| `IMAGE_SMOKE_RUN_ARGS`, `IMAGE_SMOKE_TIMEOUT` | empty, `60` | extra `docker run` words; seconds to wait |
+| `IMAGE_SMOKE_RUN_ARGS`, `IMAGE_SMOKE_TIMEOUT` | empty, `60` | extra `docker run` words, whitespace-separated with no embedded spaces or quotes (passed through the environment); seconds to wait |
 
-`SYFT_VERSION` (the SBOM tool image tag) is pinned in the Makefile with a
-`# renovate:` marker; don't override it. The image name comes from
-`GITHUB_REPOSITORY` (the repository name), never a hardcoded one;
-`OCI_IMAGE_NAME` overrides the registry path. Every target needs
-`RELEASE_ARCH` and fails through the `check-arch` prerequisite when it is
-empty. The labels are listed in `.github/workflows/README.md`'s "Image
+`SYFT_VERSION` (the SBOM tool image tag) and `SKOPEO_IMAGE` (tag and
+digest) are pinned in the Makefile for Renovate; don't override them. The
+image name comes from `GITHUB_REPOSITORY` (the repository name), never a
+hardcoded one. Inside the devcontainer, where `release-check` runs and
+`GITHUB_REPOSITORY` is unset, it is derived from the `origin` remote (ssh
+or https form), and from the directory name as a last resort;
+`image-smoke` also accepts the single `dist/*-<version>-<arch>.tar` when
+the expected name is absent. `OCI_IMAGE_NAME` overrides the registry path.
+`build`, `sbom`, `release-assets` and `publish` need `RELEASE_ARCH` and
+fail through the `check-arch` prerequisite when it is empty;
+`release-arches`, `release-check`/`image-smoke` (host arch when unset) and
+`finalize` don't. `publish` copies the tar from `dist/` that was SBOM'd
+and smoke-tested to the registry with skopeo (`oci-archive:` to
+`docker://`, Apache-2.0, pinned image; `crane push` only reads
+docker-format tarballs, and `build` writes an OCI layout), so the pushed
+digest is the tested one. It records the digest in
+`dist/<name>-<version>-<arch>.digest`, and `finalize` builds the manifest
+list from those digests. Registry login uses a throwaway authfile fed the
+password on stdin. The labels are listed in `.github/workflows/README.md`'s "Image
 labels". Registry auth stays the opt-in `OCI_REGISTRY*` secrets contract.
 
 ### Adding `release-check` steps
@@ -232,7 +245,10 @@ instance-tests:
 	uv run pytest --cov-report=xml:dist/coverage.xml
 ```
 
-`image-smoke` reads `IMAGE_TAR_PREFIX` (set by the Makefile), the arch
+`release-assets` depends on `image-smoke`, so each arch is booted
+natively on its own runner in the build job before `publish`; the
+`release-check` run inside the devcontainer smoke-tests the host arch
+again with the backing services up. `image-smoke` reads `IMAGE_TAR_PREFIX` (set by the Makefile), the arch
 from `RELEASE_ARCH` (else the host's, else `amd64`), maps a random host
 port to `IMAGE_SMOKE_PORT`, prints the container logs on failure and
 always removes the container.

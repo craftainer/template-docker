@@ -7,10 +7,15 @@
 # sets these)
 #   IMAGE_TAR_PREFIX     required; tar is "$IMAGE_TAR_PREFIX-<arch>.tar"
 #                        (e.g. dist/template-docker-1.2.3)
+#   RELEASE_VERSION      if that tar is missing (the image name may differ
+#                        when the repository name can't be derived), the one
+#                        dist/*-$RELEASE_VERSION-<arch>.tar is used instead
 #   RELEASE_ARCH         arch to test; default: the host's, else amd64
 #   IMAGE_SMOKE_PORT     container port (default 8000)
 #   IMAGE_SMOKE_PATH     URL path (default /health/live)
-#   IMAGE_SMOKE_RUN_ARGS extra `docker run` words, e.g. "-e FOO=bar"
+#   IMAGE_SMOKE_RUN_ARGS extra `docker run` words, whitespace-separated and
+#                        without embedded spaces or quotes, e.g. "-e FOO=bar"
+#                        (read from the environment, never from recipe text)
 #   IMAGE_SMOKE_TIMEOUT  seconds to wait (default 60)
 set -euo pipefail
 
@@ -29,6 +34,13 @@ if [[ -z "${RELEASE_ARCH:-}" && ! -f "$prefix-$arch.tar" ]]; then
     arch=amd64
 fi
 tar="$prefix-$arch.tar"
+if [[ ! -f "$tar" && -n "${RELEASE_VERSION:-}" ]]; then
+    shopt -s nullglob
+    candidates=("$(dirname "$prefix")"/*-"$RELEASE_VERSION-$arch".tar)
+    if [[ ${#candidates[@]} -eq 1 ]]; then
+        tar="${candidates[0]}"
+    fi
+fi
 [[ -f "$tar" ]] || { echo "image-smoke: $tar not found; run 'make build' first." >&2; exit 1; }
 
 echo "image-smoke: loading $tar"

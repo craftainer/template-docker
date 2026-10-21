@@ -233,15 +233,15 @@ workflow works with no registry configured at all. When it is set:
 
 ## Image labels
 
-Both copies of the published image (the OCI tarball and, if configured,
-the registry push) carry the same label set, computed once by the
-Makefile's `LABELS` (not by `docker/metadata-action`), so `build` and
-`publish` produce identical labels in separate `make` invocations:
+The image is built once, with the label set computed by the Makefile's
+`LABELS` (not by `docker/metadata-action`). The registry copy is that same
+tar pushed with skopeo (`make publish`), not a rebuild, so the labels and
+the digest are those of the tested artifact:
 
 - `org.opencontainers.image.title` (the repository name), `.source` and
   `.url` (the repository), `.version` (`RELEASE_VERSION`), `.revision`
   (`git rev-parse HEAD`), `.created` (the commit time, not the build
-  time, so rebuilds are reproducible), and `.licenses` (`OCI_LICENSE`,
+  time), and `.licenses` (`OCI_LICENSE`,
   default `GPL-3.0-or-later`).
 - `org.opencontainers.image.description`, only when the instance sets
   `OCI_DESCRIPTION` in `image.mk` (the Makefile has no offline source
