@@ -233,20 +233,27 @@ workflow works with no registry configured at all. When it is set:
 
 ## Image labels
 
-Both copies of the published image (the OCI tarball and, if configured,
-the registry push) carry the same label set, computed once by
-`docker/metadata-action`:
+The image is built once, with the label set computed by the Makefile's
+`LABELS` (not by `docker/metadata-action`). The registry copy is that same
+tar pushed with skopeo (`make publish`), not a rebuild, so the labels and
+the digest are those of the tested artifact:
 
-- Standard `org.opencontainers.image.title` / `.description` / `.url` /
-  `.source` / `.revision` (`github.sha`) / `.created` / `.version`,
-  derived from git/GitHub context.
-- `io.github.<repository_owner>.sbom` and
-  `io.github.<repository_owner>.coverage-report` — URLs to that
-  release's SBOM and `coverage.xml` assets. Namespaced under the repo
-  owner (not `org.opencontainers.image.*`, which is reserved for the
-  spec's own keys) and derived from `github.repository_owner` alone, so
-  it's one stable prefix per org across every repo/template instance
-  that org owns, rather than a per-repo namespace to look up each time.
+- `org.opencontainers.image.title` (the repository name), `.source` and
+  `.url` (the repository), `.version` (`RELEASE_VERSION`), `.revision`
+  (`git rev-parse HEAD`), `.created` (the commit time, not the build
+  time), and `.licenses` (`OCI_LICENSE`,
+  default `GPL-3.0-or-later`).
+- `org.opencontainers.image.description`, only when the instance sets
+  `OCI_DESCRIPTION` in `image.mk` (the Makefile has no offline source
+  for the repository description).
+- `io.github.<repository_owner>.sbom` — the URL of that release's SPDX
+  SBOM asset. Namespaced under the repo owner (not
+  `org.opencontainers.image.*`, which is reserved for the spec's own
+  keys) and derived from the repository owner alone, so it's one stable
+  prefix per org across every repo/template instance that org owns.
+- `io.github.<repository_owner>.coverage-report`, only when the instance
+  sets `COVERAGE_REPORT` in `image.mk` to the release asset's name.
+- Whatever the instance adds through `EXTRA_LABELS`.
 
 ## Release variables and secrets
 
@@ -261,6 +268,20 @@ cleanly when the registry isn't configured.
 - `CI_RUNNER_AMD64` / `CI_RUNNER_ARM64` (variables, optional) — runner
   labels for each arch leg, defaulting to `ubuntu-24.04` /
   `ubuntu-24.04-arm`.
+- `PYPI_PUBLISH` (variable, optional) — `testpypi` or `pypi`; selects the
+  index `make publish` uploads to via trusted publishing. Unset skips it.
+- `NPM_PUBLISH` / `CARGO_PUBLISH` (variables, optional) — non-empty makes
+  `make publish` push to npm / crates.io; unset skips it. Passed to
+  `build` and, like `PYPI_PUBLISH`, forwarded to `release-check` so it
+  can install what publish uploaded.
+- `NPM_TOKEN` / `CARGO_REGISTRY_TOKEN` (secrets, optional) — bootstrap
+  tokens for the first release of a package, before trusted publishing
+  is configured. Exposed only on the `make publish` step's `env:`, never
+  job-wide or to any other step. An unset secret arrives as an empty
+  string, so the Makefile must treat empty as absent. `NPM_TOKEN` is
+  deliberately not mapped to `NODE_AUTH_TOKEN`: npm's OIDC trusted
+  publishing breaks when that variable is set, even to an empty string,
+  so the npm template's Makefile decides what to do with `NPM_TOKEN`.
 
 ## Do
 
@@ -268,8 +289,10 @@ cleanly when the registry isn't configured.
   nothing broader (`template-sync.yml` also needs `pull-requests:
   write`, for nothing else); leave `checks.yml` at `contents: read`.
 - Keep `id-token: write` on `release.yml`'s `build` job only (the one
-  running `make publish`): PyPI trusted publishing via GitHub OIDC. It
-  is unused by repos that don't publish to PyPI.
+  running `make publish`): PyPI, npm and crates.io trusted publishing
+  via GitHub OIDC. It is unused by repos that publish to none of them.
+- Keep `NPM_TOKEN` and `CARGO_REGISTRY_TOKEN` on the `make publish`
+  step's `env:` only.
 
 ## Don't
 

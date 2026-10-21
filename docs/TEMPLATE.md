@@ -40,8 +40,13 @@ artifact on top of the shape described here.
   an instance hook directory (`develop.d/`, `post-create.d/`); see
   `scripts/README.md` and "Instance extension points" below.
 - `Makefile` — the release contract `release.yml` drives
-  (`build`/`sbom`/`release-assets`/`publish`), each a documented no-op
-  here — see "Release: a Makefile contract" below.
+  (`build`/`sbom`/`release-assets`/`publish`); in `template-docker` the
+  image implementation — see "Release: a Makefile contract" and "Image
+  layer (template-docker)" below.
+- `Dockerfile`, `image.mk`, `.dockerignore`, `scripts/image-smoke.sh`,
+  `scripts/runner-setup.sh`, `scripts/runner-setup.d/`,
+  `scripts/check-dockerfile-versions.sh` — the image layer; see "Image
+  layer (template-docker)" below.
 - `.pre-commit-config.yaml` — git hooks, run by `prek` or `pre-commit`;
   language-agnostic hooks only.
 - `CLAUDE.md` — the AI-assisted coding workflow Claude Code follows in
@@ -134,8 +139,8 @@ unchanged across every instance), then drives these targets:
 | Target | Runs | Where | Env available |
 |---|---|---|---|
 | `release-arches` | once, first | host runner | none; must print a JSON array on stdout, e.g. `["amd64"]` |
-| `build`, `sbom`, `release-assets`, `publish` | once **per arch**, in that order | host runner for that arch | `RELEASE_VERSION`, `RELEASE_TAG`, `RELEASE_ARCH`, `OCI_REGISTRY`, `OCI_IMAGE_NAME`, `OCI_REGISTRY_USERNAME`, `OCI_REGISTRY_PASSWORD`, all `GITHUB_*` |
-| `release-check` | once, after all arches | **inside the devcontainer** (`devcontainers/ci`), stack up | `RELEASE_VERSION`, `RELEASE_TAG` |
+| `build`, `sbom`, `release-assets`, `publish` | once **per arch**, in that order | host runner for that arch | `RELEASE_VERSION`, `RELEASE_TAG`, `RELEASE_ARCH`, `OCI_REGISTRY`, `OCI_IMAGE_NAME`, `OCI_REGISTRY_USERNAME`, `OCI_REGISTRY_PASSWORD`, `PYPI_PUBLISH`, `NPM_PUBLISH`, `CARGO_PUBLISH`, all `GITHUB_*`; on `publish` only, `NPM_TOKEN` and `CARGO_REGISTRY_TOKEN` (bootstrap secrets; empty when unset, so treat empty as absent) |
+| `release-check` | once, after all arches | **inside the devcontainer** (`devcontainers/ci`), stack up | `RELEASE_VERSION`, `RELEASE_TAG`, `PYPI_PUBLISH`, `NPM_PUBLISH`, `CARGO_PUBLISH` |
 | `finalize` | once, after `release-check` | host runner | same as per-arch minus `RELEASE_ARCH` |
 
 What each target is for: `build` produces the release artifact(s) (an
@@ -161,13 +166,173 @@ The arch legs run natively, not under QEMU: `arm64` on `ubuntu-24.04-arm`,
 `amd64` on `ubuntu-24.04`, each overridable with the `CI_RUNNER_ARM64` /
 `CI_RUNNER_AMD64` repository/organization variables.
 
-This repo's own `Makefile` implements every target as a documented
+`template-docker` replaces that no-op `Makefile` with the image
+implementation (see "Image layer (template-docker)" below). The base
+`Makefile` implements every target as a documented
 no-op, since `template-base` ships no artifact — it's both a working
 example of the contract's shape and what `release.yml` needs to run
 cleanly if this repo itself is ever released. An instance's `Makefile` is
 not template-owned (it's the whole point that it differs per artifact
 type), so it's tracked like any other instance-owned file — untouched by
 this template's own sync manifest.
+
+## Image layer (template-docker)
+
+`template-docker` is a mid-layer template: an instance of `template-base`
+that is itself the template for every app that ships a container image
+(`template-fastapi`, `template-axum`, `template-react`). Sync runs in
+three hops, base to docker to app, and `ADR 0001` records why. It adds
+these files over base:
+
+| Path | Tier for instances | What it is |
+|---|---|---|
+| `Makefile` | `replace` | the image implementation of the release contract above |
+| `image.mk` | `ignore` | the instance's settings for the Makefile, every variable commented |
+| `Dockerfile` | `ignore` | skeleton to replace: `builder` and `runner` stages, `ARG DEBIAN_VERSION`, `ARG APP_UID`, SSL ARGs, `APP_VERSION`/`APP_COMMIT` |
+| `.dockerignore` | `merge` | baseline build-context excludes; the instance appends its own |
+| `scripts/image-smoke.sh` | `replace` | loads the image tar from `dist/`, runs it and polls a URL |
+| `scripts/runner-setup.sh` | `replace` | creates the group-0 runtime user and its writable directories for the `runner` stage |
+| `scripts/image-scan.sh` | `replace` | the Trivy scan the `image-scan` hook runs |
+| `scripts/runner-setup.d/*.sh` | `ignore` | the instance's runner-stage hooks |
+| `scripts/check-dockerfile-versions.sh` | `replace` | the version-ARG consistency check |
+
+### `image.mk` variables
+
+The Makefile starts with `-include image.mk` (a missing file means all
+defaults) and every variable is `?=`, so set them in `image.mk`:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `DOCKERFILE`, `TARGET` | `Dockerfile`, `runner` | build file and stage |
+| `ARCHES` | `amd64 arm64` | space-separated; `release-arches` prints it as a JSON array and `finalize` merges the per-arch images into one tag; must not be empty |
+| `BUILD_ARGS` | empty | full flag words, e.g. `--build-arg APP_VERSION=$(RELEASE_VERSION)` |
+| `EXTRA_LABELS` | empty | full flag words, e.g. `--label k=v` |
+| `OCI_DESCRIPTION` | empty | `org.opencontainers.image.description`; the label is omitted while empty |
+| `OCI_LICENSE` | `GPL-3.0-or-later` | SPDX id for `org.opencontainers.image.licenses` |
+| `COVERAGE_REPORT` | empty | release asset name for the `io.github.<owner>.coverage-report` label; omitted while empty |
+| `IMAGE_SMOKE_PORT`, `IMAGE_SMOKE_PATH` | `8000`, `/health/live` | URL polled for a 2xx |
+| `IMAGE_SMOKE_RUN_ARGS`, `IMAGE_SMOKE_TIMEOUT` | empty, `60` | extra `docker run` words, whitespace-separated with no embedded spaces or quotes (passed through the environment); seconds to wait |
+
+`SYFT_VERSION` (the SBOM tool image tag) and `SKOPEO_IMAGE` (tag and
+digest) are pinned in the Makefile for Renovate; don't override them. The
+image name comes from `GITHUB_REPOSITORY` (the repository name), never a
+hardcoded one. Inside the devcontainer, where `release-check` runs and
+`GITHUB_REPOSITORY` is unset, it is derived from the `origin` remote (ssh
+or https form), and from the directory name as a last resort;
+`image-smoke` also accepts the single `dist/*-<version>-<arch>.tar` when
+the expected name is absent. `OCI_IMAGE_NAME` overrides the registry path.
+`build`, `sbom`, `release-assets` and `publish` need `RELEASE_ARCH` and
+fail through the `check-arch` prerequisite when it is empty;
+`release-arches`, `release-check`/`image-smoke` (host arch when unset) and
+`finalize` don't. `publish` copies the tar from `dist/` that was SBOM'd
+and smoke-tested to the registry with skopeo (`oci-archive:` to
+`docker://`, Apache-2.0, pinned image; `crane push` only reads
+docker-format tarballs, and `build` writes an OCI layout), so the pushed
+digest is the tested one. It records the digest in
+`dist/<name>-<version>-<arch>.digest`, and `finalize` builds the manifest
+list from those digests. Registry login uses a throwaway authfile fed the
+password on stdin. The labels are listed in `.github/workflows/README.md`'s "Image
+labels". Registry auth stays the opt-in `OCI_REGISTRY*` secrets contract.
+
+### Adding `release-check` steps
+
+`release-check` has no recipe of its own: it depends on `image-smoke`.
+An instance adds steps as prerequisites in `image.mk`, so Make never
+sees two recipes for one target:
+
+```make
+release-check: instance-tests
+instance-tests:
+	uv run pytest --cov-report=xml:dist/coverage.xml
+```
+
+`release-assets` depends on `image-smoke`, so each arch is booted
+natively on its own runner in the build job before `publish`; the
+`release-check` run inside the devcontainer smoke-tests the host arch
+again with the backing services up. `image-smoke` reads `IMAGE_TAR_PREFIX` (set by the Makefile), the arch
+from `RELEASE_ARCH` (else the host's; if `RELEASE_ARCH` is unset and
+there is no tar for the host arch, it prints a notice and exits 0, since
+the per-arch run already covered that arch), maps a random host port to
+`IMAGE_SMOKE_PORT`, prints the container logs on failure and always
+removes the container and the private `image-smoke-*` tag it created
+(never an image that existed before).
+
+### Runner setup hook
+
+`scripts/runner-setup.sh` creates the user (UID `APP_UID`, group 0), makes
+its home and `/app/data` group-writable, and leaves `/app` root-owned, so
+the image also runs under an arbitrary UID (OpenShift's restricted SCC).
+Run it **before** copying app code, then copy the code after it with
+`COPY --chown=<uid>:0 --chmod=u=rX,g=rX,o=` (0550 directories, 0440
+files): only data and cache directories are writable, the runtime user
+can't modify what it runs, and no recursive `chgrp`/`chmod` duplicates
+the files into another layer. It then runs every
+`scripts/runner-setup.d/*.sh` in glob order as `bash NN-name.sh APP_UID`,
+still as root and in the same `RUN` layer. The instance puts extra
+packages and writable directories there instead of editing the script.
+
+### Dockerfile version check
+
+The `check-dockerfile-versions` hook runs
+`scripts/check-dockerfile-versions.sh DEBIAN_VERSION` whenever either
+Dockerfile changes: each named ARG must have the same default in
+`.devcontainer/Dockerfile` and `Dockerfile` (the runtime must match the
+toolchain the devcontainer tests against). An instance appends the ARG
+names it keeps in both files (e.g. `RUST_VERSION`) to the hook's `entry:`
+in its `.pre-commit-config.yaml`; ARGs not listed aren't checked.
+
+### Image hooks
+
+- `hadolint` lints both Dockerfiles, run from the pinned official image
+  (so it needs Docker). It fails on warnings and above, not on info-level
+  findings, and has no repo-wide ignores. An instance that must
+  install an unpinned apt package adds a per-line
+  `# hadolint ignore=DL3008` with a reason (as the skeleton `Dockerfile`
+  does: Debian drops superseded versions, so pins break rebuilds).
+- `image-scan` runs only at the `manual` stage, because it needs
+  `dist/*.tar` from `make build` and network access for the vulnerability
+  database. With no tar it skips. Otherwise `scripts/image-scan.sh` runs a
+  pinned Trivy image on each tar and fails on HIGH or CRITICAL
+  findings that have a fix (`--severity HIGH,CRITICAL --ignore-unfixed
+  --exit-code 1`). Trivy can't read the OCI-layout tar `make build`
+  writes, so the script unpacks it and scans the directory, selecting
+  `linux/<arch>` from the tar's name so a buildx attestation manifest is
+  never scanned instead of the image. The database is cached in the `trivy-cache` Docker
+  volume. Trivy is Apache-2.0, so invoking it as a tool is compatible
+  with this repo's GPL-3.0 licence. The scanner is the maintainers'
+  choice, made over Grype. Trivy's releases and Docker Hub images were
+  compromised in March 2026 (GHSA-69fq-xp46-6x23), so the image is pinned
+  by digest as well as tag (`aquasec/trivy:<version>@sha256:…`); the
+  advisory lists images referenced by digest as unaffected. Renovate
+  updates tag and digest together. When bumping by hand, take the digest
+  from the registry and verify it with cosign as the advisory describes:
+  `cosign verify --certificate-identity-regexp
+  'https://github\.com/aquasecurity/' --certificate-oidc-issuer
+  'https://token.actions.githubusercontent.com'
+  ghcr.io/aquasecurity/trivy@sha256:…` (the Docker Hub, GHCR and ECR
+  digests of a release are identical).
+
+### Re-parenting an existing app onto template-docker
+
+One-time steps for an app that is today an instance of `template-base`
+(or of a sibling template) and moves under `template-docker`:
+
+1. Make the tracked files equal `template-docker`'s tag: take the
+   template's `Makefile`, `scripts/` files, `.dockerignore` and
+   `.pre-commit-config.yaml` hooks, move the app's Makefile settings into
+   `image.mk` and its runtime user setup into `scripts/runner-setup.d/`,
+   and list its version ARGs on the `check-dockerfile-versions` hook.
+2. For `template-react` and `template-axum`, which were not synced from
+   base, migrate to base's layout first (devcontainer, workflows, docs,
+   manifest) and let a base sync PR settle before this step.
+3. Bootstrap the sync state: run `template-sync.yml` manually with
+   `template_repo=craftainer/template-docker` and `initial_sync_tag` set
+   to the tag the files now equal. That writes
+   `.github/template-sync-state.json` without changing files. From then on
+   syncs track `template-docker`, which in turn tracks base.
+4. Resolve base's additions to the manifest by hand when
+   `template-docker` is the one syncing from base, as the header of
+   `.github/template-sync-manifest.yml` says.
 
 ## Template sync
 

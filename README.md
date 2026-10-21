@@ -1,18 +1,18 @@
-# template-base
+# template-docker
 
 > [!NOTE]
 > This repository is vibe coded with [Claude](https://claude.com/product/claude-code).
 
-The generic "devcontainer + CI + AI-assisted workflow" scaffold shared by
-a wider family of template repos — no application runtime, no backing
-services, no language assumed. See [`docs/TEMPLATE.md`](docs/TEMPLATE.md)
-for contents, getting started, checks, the release Makefile contract,
-template sync, versions/config, and code style — everything about this
-repository that's identical across every instance. A repo that wants a
-full application skeleton on top of this (e.g. FastAPI/Postgres/Redis)
-should instantiate that template instead — see
-[`template-fastapi`](https://github.com/craftainer/template-fastapi),
-itself an instance of this template.
+The shared image layer for container-shipping apps: an instance of
+[`template-base`](https://github.com/craftainer/template-base) that is
+itself a template. On top of base's devcontainer, CI and AI-assisted
+workflow it adds the image release `Makefile` (multi-arch OCI build, SBOM,
+labels, registry publish, smoke test), a skeleton runtime `Dockerfile`
+with an arbitrary-UID `runner` stage, and Dockerfile lint, version-check
+and image-scan hooks. App templates such as `template-fastapi` instantiate
+this one and sync from it. See [`docs/TEMPLATE.md`](docs/TEMPLATE.md) for
+the details and [`docs/adrs/0001-shared-image-layer-as-template-docker-mid-layer.md`](docs/adrs/0001-shared-image-layer-as-template-docker-mid-layer.md)
+for why.
 
 Once instantiated, rename this file's title and description to the
 actual project's; `docs/TEMPLATE.md` stays as-is and is what
