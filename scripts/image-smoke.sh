@@ -56,6 +56,7 @@ image=""
 # shellcheck disable=SC2329  # invoked by the EXIT trap below
 cleanup() {
     status=$?
+    set +e
     if [[ -n "$cid" ]]; then
         if [[ $status -ne 0 ]]; then
             echo "image-smoke: container logs:" >&2
@@ -64,7 +65,8 @@ cleanup() {
         docker rm -f "$cid" >/dev/null 2>&1 || true
     fi
     [[ -z "$image" ]] || docker image rm "$image" >/dev/null 2>&1 || true
-    [[ -z "$work" ]] || rm -r "$work"
+    [[ -z "$work" ]] || rm -rf "$work" || true
+    exit "$status"
 }
 trap cleanup EXIT
 
@@ -75,12 +77,16 @@ trap cleanup EXIT
 # that shares the workspace but not this process's /tmp.
 : "${SKOPEO_IMAGE:?SKOPEO_IMAGE is required (set by the Makefile)}"
 echo "image-smoke: loading $tar (linux/$arch)"
-work="$(mktemp -d "$(dirname "$tar")/.image-smoke.XXXXXX")"
+tar_dir="$(cd "$(dirname "$tar")" && pwd)"
+work="$(mktemp -d "$tar_dir/.image-smoke.XXXXXX")"
+# mktemp makes the directory 0700; with rootless or userns-remapped Docker
+# the container's user can't write into it. It only exists inside dist/, for
+# the length of this script.
+chmod 0777 "$work"
 # Run (and later remove) a private reference, so cleanup never touches an
 # image that already existed.
 image="image-smoke-$RANDOM$RANDOM:smoke"
-docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
-    -v "$PWD/$(dirname "$tar"):/dist" "$SKOPEO_IMAGE" \
+SKOPEO_DIST_DIR="$tar_dir" bash "$(dirname "${BASH_SOURCE[0]}")/skopeo.sh" -- \
     --override-os linux --override-arch "$arch" \
     copy "oci-archive:/dist/$(basename "$tar")" \
     "docker-archive:/dist/$(basename "$work")/image.tar:$image"

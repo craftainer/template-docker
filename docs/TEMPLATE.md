@@ -249,11 +249,13 @@ instance-tests:
 `release-assets` depends on `image-smoke`, so each arch is booted
 natively on its own runner in the build job before `publish`; the
 `release-check` run inside the devcontainer smoke-tests the host arch
-again with the backing services up. `image-smoke` converts the arch's image in the OCI-layout tar with the
-pinned skopeo (`--override-arch`, to a docker-archive under `dist/`) and
-`docker load`s that, because `docker load` can't read a buildx OCI tar on
-the classic image store, with or without attestations. It reads
-`IMAGE_TAR_PREFIX` and `SKOPEO_IMAGE` (set by the Makefile), the arch
+again with the backing services up. `image-smoke` converts the arch's
+image in the OCI-layout tar with the pinned skopeo (through
+`scripts/skopeo.sh`, which `publish` uses too; `--override-arch`, to a
+docker-archive under `dist/`) and `docker load`s that, because
+`docker load` can't read a buildx OCI tar on the classic image store,
+with or without attestations. It reads `IMAGE_TAR_PREFIX` and
+`SKOPEO_IMAGE` (set by the Makefile), the arch
 from `RELEASE_ARCH` (else the host's; if `RELEASE_ARCH` is unset and
 there is no tar for the host arch, it prints a notice and exits 0, since
 the per-arch run already covered that arch), maps a random host port to
