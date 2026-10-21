@@ -54,6 +54,7 @@ OCI_NAME = $(shell printf '%s' '$(or $(OCI_IMAGE_NAME),$(REPO))' | tr '[:upper:]
 export OCI_DESCRIPTION
 export IMAGE_SMOKE_RUN_ARGS IMAGE_SMOKE_PORT IMAGE_SMOKE_PATH IMAGE_SMOKE_TIMEOUT RELEASE_VERSION
 export IMAGE_TAR_PREFIX = $(ASSET_PREFIX)
+export SKOPEO_IMAGE
 
 # Only set in CI, by crazy-max/ghaction-github-runtime in release.yml.
 ifdef ACTIONS_RUNTIME_TOKEN

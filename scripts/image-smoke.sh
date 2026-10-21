@@ -5,6 +5,7 @@
 #
 # Usage: image-smoke.sh   (configured by environment; `make image-smoke`
 # sets these)
+#   SKOPEO_IMAGE         required (the Makefile sets it); converts the tar for docker load
 #   IMAGE_TAR_PREFIX     required; tar is "$IMAGE_TAR_PREFIX-<arch>.tar"
 #                        (e.g. dist/template-docker-1.2.3)
 #   RELEASE_VERSION      if that tar is missing (the image name may differ
@@ -49,16 +50,9 @@ if [[ ! -f "$tar" ]]; then
     exit 1
 fi
 
-echo "image-smoke: loading $tar"
-loaded="$(docker load -i "$tar")"
-echo "$loaded"
-loaded_ref="${loaded##*: }"
-# Run (and later remove) a private reference, so cleanup never touches an
-# image that already existed under the loaded name.
-image="image-smoke-$RANDOM$RANDOM"
-docker tag "$loaded_ref" "$image"
-
 cid=""
+work=""
+image=""
 # shellcheck disable=SC2329  # invoked by the EXIT trap below
 cleanup() {
     status=$?
@@ -69,9 +63,28 @@ cleanup() {
         fi
         docker rm -f "$cid" >/dev/null 2>&1 || true
     fi
-    docker image rm "$image" >/dev/null 2>&1 || true
+    [[ -z "$image" ]] || docker image rm "$image" >/dev/null 2>&1 || true
+    [[ -z "$work" ]] || rm -r "$work"
 }
 trap cleanup EXIT
+
+# `docker load` can't read the OCI-layout tar buildx writes (no manifest.json;
+# with attestations the index nests another index), so skopeo converts the
+# one image for $arch into a docker-archive first. Both live under dist/,
+# which is mounted at /dist, so the paths also exist for a Docker daemon
+# that shares the workspace but not this process's /tmp.
+: "${SKOPEO_IMAGE:?SKOPEO_IMAGE is required (set by the Makefile)}"
+echo "image-smoke: loading $tar (linux/$arch)"
+work="$(mktemp -d "$(dirname "$tar")/.image-smoke.XXXXXX")"
+# Run (and later remove) a private reference, so cleanup never touches an
+# image that already existed.
+image="image-smoke-$RANDOM$RANDOM:smoke"
+docker run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp \
+    -v "$PWD/$(dirname "$tar"):/dist" "$SKOPEO_IMAGE" \
+    --override-os linux --override-arch "$arch" \
+    copy "oci-archive:/dist/$(basename "$tar")" \
+    "docker-archive:/dist/$(basename "$work")/image.tar:$image"
+docker load -i "$work/image.tar"
 
 cid="$(docker run -d -p "127.0.0.1::${port}" "${run_args[@]}" "$image")"
 mapped="$(docker port "$cid" "${port}/tcp" | head -n1 | sed 's/.*://')"
