@@ -50,6 +50,23 @@ git+ssh://git@host:22/o/r.git|o/r
 SSH://git@host:22/o/r.git|o/r
 EOF_URLS
 
+# GITHUB_REPOSITORY wins over the remote; a failing git (no origin here) is an
+# error for targets that need REPO, with git's message on stderr, never a guess.
+dir="$tmp/repo-pref"
+mkdir -p "$dir"
+git -C "$dir" init -q
+git -C "$dir" remote add origin https://github.com/o/r.git
+out="$(cd "$dir" && GITHUB_REPOSITORY=x/y make -s -f "$root/Makefile" -f <(printf 'show-repo:\n\t@echo $(REPO)\n') show-repo)"
+expect_eq "GITHUB_REPOSITORY preferred" "x/y" "$out"
+dir="$tmp/repo-norem"
+mkdir -p "$dir"
+git -C "$dir" init -q
+out="$(cd "$dir" && make -s -f "$root/Makefile" repo-check 2>&1)" && fail "repo-check: git failure should fail"
+[[ "$out" == *"cannot derive the repository"* && "$out" == *"origin"* ]] || fail "repo-check: wrong message: $out"
+out="$(cd "$dir" && make -s -f "$root/Makefile" publish RELEASE_ARCH=amd64 2>&1)" && fail "publish: git failure should fail"
+[[ "$out" == *"cannot derive the repository"* ]] || fail "publish: wrong message: $out"
+(cd "$dir" && GITHUB_REPOSITORY=o/r make -s -f "$root/Makefile" repo-check) || fail "repo-check: GITHUB_REPOSITORY should pass"
+
 # check-dockerfile-versions.sh in a scratch repo layout.
 dv="$tmp/dv"
 mkdir -p "$dv/.devcontainer"
