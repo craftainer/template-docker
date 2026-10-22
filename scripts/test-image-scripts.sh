@@ -63,8 +63,9 @@ mkdir -p "$dir"
 git -C "$dir" init -q
 out="$(cd "$dir" && make -s -f "$root/Makefile" repo-check 2>&1)" && fail "repo-check: git failure should fail"
 [[ "$out" == *"cannot derive the repository"* && "$out" == *"origin"* ]] || fail "repo-check: wrong message: $out"
-out="$(cd "$dir" && make -s -f "$root/Makefile" publish RELEASE_ARCH=amd64 2>&1)" && fail "publish: git failure should fail"
+out="$(cd "$dir" && make -s -f "$root/Makefile" publish RELEASE_ARCH=amd64 OCI_REGISTRY=r 2>&1)" && fail "publish: git failure should fail"
 [[ "$out" == *"cannot derive the repository"* ]] || fail "publish: wrong message: $out"
+out="$(cd "$dir" && make -s -f "$root/Makefile" publish RELEASE_ARCH=amd64 2>&1)" || fail "publish: skipped publish should not need REPO: $out"
 (cd "$dir" && GITHUB_REPOSITORY=o/r make -s -f "$root/Makefile" repo-check) || fail "repo-check: GITHUB_REPOSITORY should pass"
 
 # check-dockerfile-versions.sh in a scratch repo layout.

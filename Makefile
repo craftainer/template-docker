@@ -99,9 +99,11 @@ LABELS += $(EXTRA_LABELS)
 BUILD = docker buildx build -f $(DOCKERFILE) --target $(TARGET) \
 	--platform linux/$(RELEASE_ARCH) $(BUILD_ARGS) $(LABELS) $(CACHE)
 
+REPO_GUARD = test -n "$(REPO)" || { printf '%s\n' "$$REPO_ERROR" >&2; exit 1; }
+
 # Prerequisite of every target whose output names the repo.
 repo-check:
-	@if [ -z "$(REPO)" ]; then printf '%s\n' "$$REPO_ERROR" >&2; exit 1; fi
+	@$(REPO_GUARD)
 
 check-arch:
 	@test -n "$(RELEASE_ARCH)" || { echo "RELEASE_ARCH is not set." >&2; exit 1; }
@@ -128,10 +130,11 @@ release-assets: check-arch repo-check image-smoke
 # so the password never appears in a command line. Without --all skopeo
 # copies one image chosen by the host's platform, which can fail or pick the
 # wrong image for a non-native RELEASE_ARCH, and it drops the attestations.
-publish: check-arch repo-check
+publish: check-arch
 ifeq ($(OCI_REGISTRY),)
 	@echo "OCI_REGISTRY not set -- skipping publish."
 else
+	@$(REPO_GUARD)
 	@test -f $(ASSET).tar || { echo "$(ASSET).tar not found; run 'make build' first." >&2; exit 1; }
 	@auth="$$(mktemp -d)" && chmod 0777 "$$auth" && trap 'rm -rf "$$auth"' EXIT && \
 	printf '%s' "$$OCI_REGISTRY_PASSWORD" | bash scripts/skopeo.sh -i -v "$$auth:/auth" -- \
@@ -143,7 +146,7 @@ endif
 
 # Smoke-tests the tar in dist/ for RELEASE_ARCH (default: the host's arch).
 # image.mk's IMAGE_SMOKE_* values reach the script through the environment.
-image-smoke:
+image-smoke: repo-check
 	bash scripts/image-smoke.sh
 
 # No recipe by design: image.mk adds steps as prerequisites, so Make never
@@ -158,10 +161,11 @@ release-check: image-smoke
 # ~/.docker/config.json. The Docker CLI looks for plugins in
 # $DOCKER_CONFIG/cli-plugins, so a user-installed buildx would vanish with
 # the swap: the user's cli-plugins directory is linked into the throwaway one.
-finalize: repo-check
+finalize:
 ifeq ($(OCI_REGISTRY),)
 	@echo "OCI_REGISTRY not set -- no manifest list to create."
 else
+	@$(REPO_GUARD)
 	@orig="$${DOCKER_CONFIG:-$$HOME/.docker}" && export DOCKER_CONFIG="$$(mktemp -d)" && trap 'rm -rf "$$DOCKER_CONFIG"' EXIT && \
 	if [ -d "$$orig/cli-plugins" ]; then ln -s "$$orig/cli-plugins" "$$DOCKER_CONFIG/cli-plugins"; fi && \
 	printf '%s' "$$OCI_REGISTRY_PASSWORD" | docker login "$(OCI_REGISTRY)" -u "$$OCI_REGISTRY_USERNAME" --password-stdin && \

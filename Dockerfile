@@ -42,8 +42,10 @@ RUN mkdir -p www/health \
 # keeps them. The symbolic `COPY --chmod=u=rX,g=rX,o=` form left files
 # unreadable on GitHub's stock-runner Docker (template-fastapi's smoke) even
 # with the dockerfile:1.28 frontend; numeric modes work everywhere.
+# Files that are executable stay so (0550), the rest are 0440.
 RUN find . -type d -exec chmod 0550 {} + \
-    && find . -type f -exec chmod 0440 {} +
+    && find . -type f ! -perm /111 -exec chmod 0440 {} + \
+    && find . -type f -perm /111 -exec chmod 0550 {} +
 
 ########################################
 # runner -- minimal runtime image. Runs under an arbitrary UID (e.g.
