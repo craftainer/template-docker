@@ -17,7 +17,7 @@ directories) instead of editing `runner-setup.sh`.
 - Use `set -euo pipefail` and give any extra *writable* directory (cache,
   uploads) group-0 ownership and `g+rwX`, as `runner-setup.sh` does for
   `/app/data`. App code is not writable: the `Dockerfile` copies it after
-  this runs, with `--chown=<uid>:0` and a read-only `--chmod`.
+  this runs, with `--chown=<uid>:0` and numeric read-only modes (0550/0440).
 
 ## Don't
 

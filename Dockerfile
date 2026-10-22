@@ -38,6 +38,14 @@ RUN apt-get update \
 WORKDIR /build
 RUN mkdir -p www/health \
     && printf 'ok\n' > www/health/live
+# Read-only modes as numeric values, applied here per kind: the runner COPY
+# keeps them. The symbolic `COPY --chmod=u=rX,g=rX,o=` form left files
+# unreadable on GitHub's stock-runner Docker (template-fastapi's smoke) even
+# with the dockerfile:1.28 frontend; numeric modes work everywhere.
+# Files that are executable stay so (0550), the rest are 0440.
+RUN find . -type d -exec chmod 0550 {} + \
+    && find . -type f ! -perm /111 -exec chmod 0440 {} + \
+    && find . -type f -perm /111 -exec chmod 0550 {} +
 
 ########################################
 # runner -- minimal runtime image. Runs under an arbitrary UID (e.g.
@@ -61,14 +69,15 @@ ENV APP_VERSION=${APP_VERSION} \
 COPY --from=builder /bin/busybox /usr/local/bin/busybox
 
 # Create the user and the few writable directories first (home, /app/data),
-# then copy app code read-only on top: no recursive chgrp/chmod layer, and
-# the runtime user can't modify what it runs.
+# then copy app code read-only on top (0550 dirs / 0440 files, set in the
+# builder; see there): no recursive chgrp/chmod layer, and the runtime user
+# can't modify what it runs.
 COPY scripts/runner-setup.sh /tmp/runner-setup.sh
 COPY scripts/runner-setup.d/ /tmp/runner-setup.d/
 RUN bash /tmp/runner-setup.sh "$APP_UID" && rm -rf /tmp/runner-setup.sh /tmp/runner-setup.d
 
 WORKDIR /app
-COPY --from=builder --chown=${APP_UID}:0 --chmod=u=rX,g=rX,o= /build/ /app/
+COPY --from=builder --chown=${APP_UID}:0 /build/ /app/
 
 USER $APP_UID
 EXPOSE 8000

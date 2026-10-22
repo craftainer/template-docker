@@ -220,7 +220,10 @@ image name comes from `GITHUB_REPOSITORY` (the repository name), never a
 hardcoded one. Inside the devcontainer, where `release-check` runs and
 `GITHUB_REPOSITORY` is unset, it is derived from the `origin` remote
 (`ssh://[user@]host[:PORT]/owner/repo`, scp-like or https form; tested by
-`scripts/test-image-scripts.sh`), and from the directory name as a last resort;
+`scripts/test-image-scripts.sh`). If git fails (no `origin`, "dubious
+ownership"), there is no guess: `build`, `sbom`, `release-assets`, `publish`
+and `finalize` print git's error to stderr and fail, and
+`GITHUB_REPOSITORY=owner/repo` overrides;
 `image-smoke` also accepts the single `dist/*-<version>-<arch>.tar` when
 the expected name is absent. `OCI_IMAGE_NAME` overrides the registry path.
 `build`, `sbom`, `release-assets` and `publish` need `RELEASE_ARCH` and
@@ -235,7 +238,9 @@ digest is the tested one. `--all` pushes the tar's whole index as
 manifests (provenance, SBOM) when the build wrote any. Without it skopeo
 picks one image by the *host's* platform, which can fail or pick the wrong
 image when `RELEASE_ARCH` isn't native, and it drops the attestations. It
-records that index's digest in `dist/<name>-<version>-<arch>.digest`, and
+records that index's digest in `dist/<name>-<version>-<arch>.digest` (which
+`finalize` deletes after use, so release.yml never attaches digest files to
+the GitHub release), and
 `finalize` builds the manifest list from those digests (`imagetools create`
 merges the per-arch indexes, so the attestations carry over). `finalize`
 logs in with a throwaway `DOCKER_CONFIG`, into which it links the user's
@@ -286,10 +291,16 @@ they are template-owned, and nothing checks or requires them.
 its home and `/app/data` group-writable, and leaves `/app` root-owned, so
 the image also runs under an arbitrary UID (OpenShift's restricted SCC).
 Run it **before** copying app code, then copy the code after it with
-`COPY --chown=<uid>:0 --chmod=u=rX,g=rX,o=` (0550 directories, 0440
-files): only data and cache directories are writable, the runtime user
+`COPY --chown=<uid>:0` of content whose modes are already 0550
+directories and 0440 files: only data and cache directories are writable, the runtime user
 can't modify what it runs, and no recursive `chgrp`/`chmod` duplicates
-the files into another layer. It then runs every
+the files into another layer. Set those modes numerically, per kind
+(`find . -type d -exec chmod 0550 {} +`, `find . -type f -exec chmod 0440
+{} +`, e.g. in the builder stage, or `COPY --chmod=0550`/`0440` for sources
+that are all one kind), not with the symbolic `--chmod=u=rX,g=rX,o=`: that
+form left files unreadable to the app user on GitHub's stock-runner Docker
+(template-fastapi's CI smoke, even with `# syntax=docker/dockerfile:1.28`),
+though it worked on a current local daemon. It then runs every
 `scripts/runner-setup.d/*.sh` in glob order as `bash NN-name.sh APP_UID`,
 still as root and in the same `RUN` layer. The instance puts extra
 packages and writable directories there instead of editing the script.
