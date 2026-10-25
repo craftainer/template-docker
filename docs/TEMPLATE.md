@@ -336,16 +336,19 @@ records that index's digest in `dist/<name>-<version>-<arch>.digest` (which
 the GitHub release), and
 `finalize` builds the manifest list from those digests (`imagetools create`
 merges the per-arch indexes, so the attestations carry over). `finalize`
-is safe to run again (base's `release` job re-runs it when an earlier run
-failed before the GitHub release existed): `imagetools create` re-points the
-same tag at the same digests, and the digest files it reads are still in the
-`dist/` that the re-run downloads, because that `dist/` was uploaded before
-the first `finalize` deleted them. `finalize`
 logs in with a throwaway `DOCKER_CONFIG`, into which it links the user's
 `cli-plugins` directory (Docker looks up plugins in
 `$DOCKER_CONFIG/cli-plugins`), so a user-installed buildx is still found. Registry login uses a throwaway authfile fed the
 password on stdin. The labels are listed in `.github/workflows/README.md`'s "Image
 labels". Registry auth stays the opt-in `OCI_REGISTRY*` secrets contract.
+
+`finalize` must be safe to run again, and this one is: base's `release` job
+re-runs it when an earlier run failed before the GitHub release existed.
+`imagetools create` re-points the same tag at the same digests, and the
+digest files it reads are still in the `dist/` the re-run downloads, because
+that `dist/` was uploaded before the first `finalize` deleted them. Any step
+added to `finalize` here must keep that property (no side effect that
+double-applies).
 
 ### Adding `release-check` steps
 
