@@ -21,7 +21,7 @@
 # org.opencontainers.image.description (omitted while empty), and the SPDX
 # licence id for org.opencontainers.image.licenses.
 # OCI_DESCRIPTION := One sentence about the image
-# OCI_LICENSE := GPL-3.0-or-later
+# OCI_LICENSE := GPL-3.0-only
 
 # Release asset name (under the release's download URL) to point the
 # io.github.<owner>.coverage-report label at; label omitted while empty.
