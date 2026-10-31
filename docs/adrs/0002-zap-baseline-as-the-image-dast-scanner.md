@@ -24,7 +24,7 @@ We will run the ZAP baseline scan (`zap-baseline.py`) as the manual-stage
 `image-dast` hook, in `scripts/image-dast.sh`.
 
 - **Scanner.** The official ZAP image, pinned by tag and digest
-  (`ghcr.io/zaproxy/zaproxy:<version>@sha256:…`), as for Trivy in ADR 0001.
+  (`ghcr.io/zaproxy/zaproxy:<version>@sha256:…`), as `scripts/image-scan.sh` does for Trivy.
   A Renovate regex manager keeps both current.
 - **Passive only.** The baseline scan spiders the app for a minute and
   applies only passive rules; it sends no attack traffic. Active scans are

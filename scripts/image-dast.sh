@@ -85,6 +85,10 @@ smoke_path="${IMAGE_SMOKE_PATH:-/health/live}"
 timeout="${IMAGE_SMOKE_TIMEOUT:-60}"
 spider_mins="${IMAGE_DAST_SPIDER_MINS:-1}"
 rules="${IMAGE_DAST_RULES:-.zap/rules.tsv}"
+if [[ -n "${IMAGE_DAST_RULES:-}" && ! -f "$IMAGE_DAST_RULES" ]]; then
+    echo "image-dast: IMAGE_DAST_RULES=$IMAGE_DAST_RULES does not exist" >&2
+    exit 1
+fi
 read -r -a run_args <<<"${IMAGE_SMOKE_RUN_ARGS:-}"
 
 cid=""
@@ -144,7 +148,7 @@ while ((SECONDS < deadline)); do
         echo "image-dast: container exited before answering" >&2
         exit 1
     fi
-    if curl -fsS -o /dev/null "$url" 2>/dev/null; then
+    if curl -fsS --max-time 5 -o /dev/null "$url" 2>/dev/null; then
         ready=1
         break
     fi
@@ -167,11 +171,13 @@ zap_status=0
 docker run --rm --network "container:$cid" -v "$work:/zap/wrk:rw" "$zap" \
     zap-baseline.py "${zap_args[@]}" || zap_status=$?
 
-rm -rf dist/dast
-mkdir -p dist/dast
-for f in report.html report.json; do
-    if [[ -f "$work/$f" ]]; then cp "$work/$f" "dist/dast/$f"; fi
-done
+if [[ -f "$work/report.html" || -f "$work/report.json" ]]; then
+    rm -rf dist/dast
+    mkdir -p dist/dast
+    for f in report.html report.json; do
+        if [[ -f "$work/$f" ]]; then cp "$work/$f" "dist/dast/$f"; fi
+    done
+fi
 echo "image-dast: reports in dist/dast/"
 
 case "$zap_status" in
