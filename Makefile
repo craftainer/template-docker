@@ -138,6 +138,8 @@ REGISTRY_CREDS = user="$$OCI_REGISTRY_USERNAME"; pass="$$OCI_REGISTRY_PASSWORD";
 	  if [ -z "$$user" ] || [ -z "$$pass" ]; then \
 	    echo "error: OCI_REGISTRY_USERNAME is not set and GITHUB_ACTOR/GITHUB_TOKEN are empty; set the OCI_REGISTRY_* secrets or run in GitHub Actions" >&2; exit 1; \
 	  fi; \
+	elif [ -z "$$pass" ]; then \
+	  echo "error: OCI_REGISTRY_USERNAME is set but OCI_REGISTRY_PASSWORD is empty" >&2; exit 1; \
 	fi
 
 # Copies the tested tar from dist/ to the registry (skopeo copy --all

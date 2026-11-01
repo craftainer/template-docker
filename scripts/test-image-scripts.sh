@@ -161,6 +161,8 @@ for target in publish finalize; do
     [[ ! -s "$cr/log" ]] || fail "$target non-ghcr: docker ran: $(cat "$cr/log")"
     out="$(creds_run "$target" ghcr.io)"
     [[ "$(creds_rc)" != 0 && "$out" == *GITHUB_TOKEN* ]] || fail "$target ghcr without any credential should fail (rc=$(creds_rc)): $out"
+    out="$(creds_run "$target" ghcr.io OCI_REGISTRY_USERNAME=u GITHUB_ACTOR=a GITHUB_TOKEN=tok)"
+    [[ "$(creds_rc)" != 0 && "$out" == *OCI_REGISTRY_PASSWORD* ]] || fail "$target username without password should fail naming OCI_REGISTRY_PASSWORD (rc=$(creds_rc)): $out"
 done
 
 # image-dast.sh in a scratch copy of the repo (it works relative to its own
