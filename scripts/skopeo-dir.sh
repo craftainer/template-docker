@@ -7,16 +7,28 @@
 # directory has to be 0777 there (a known residual on shared hosts: it is
 # short-lived and the caller removes it).
 #
+# SKOPEO_DIR_MODE=0700|0777 overrides the detection (Docker Desktop, remote
+# daemons); any other value is an error.
+#
 # Usage: skopeo-dir.sh [MKTEMP_TEMPLATE]
 set -euo pipefail
 
+case "${SKOPEO_DIR_MODE:-}" in
+    "" | 0700 | 0777) ;;
+    *) echo "skopeo-dir: SKOPEO_DIR_MODE must be 0700 or 0777, got '$SKOPEO_DIR_MODE'" >&2; exit 2 ;;
+esac
+
 dir="$(mktemp -d "${1:-${TMPDIR:-/tmp}/skopeo.XXXXXX}")"
 
-# SecurityOptions lists e.g. "name=seccomp,profile=builtin name=rootless";
-# an unreachable daemon or a missing format field falls through to 0700.
-opts="$(docker info --format '{{range .SecurityOptions}}{{.}} {{end}}' 2>/dev/null || true)"
-case "$opts" in
-    *name=rootless* | *name=userns*) chmod 0777 "$dir" ;;
-esac
+if [[ -n "${SKOPEO_DIR_MODE:-}" ]]; then
+    chmod "$SKOPEO_DIR_MODE" "$dir"
+else
+    # SecurityOptions lists e.g. "name=seccomp,profile=builtin name=rootless";
+    # an unreachable daemon or a missing format field falls through to 0700.
+    opts="$(docker info --format '{{range .SecurityOptions}}{{.}} {{end}}' 2>/dev/null || true)"
+    case "$opts" in
+        *name=rootless* | *name=userns*) chmod 0777 "$dir" ;;
+    esac
+fi
 
 printf '%s\n' "$dir"

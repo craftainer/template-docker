@@ -91,7 +91,8 @@ image="image-smoke-$RANDOM$RANDOM:smoke"
 SKOPEO_DIST_DIR="$tar_dir" bash "$(dirname "${BASH_SOURCE[0]}")/skopeo.sh" -- \
     --override-os linux --override-arch "$arch" \
     copy "oci-archive:/dist/$(basename "$tar")" \
-    "docker-archive:/dist/$(basename "$work")/image.tar:$image"
+    "docker-archive:/dist/$(basename "$work")/image.tar:$image" \
+    || { echo "error: skopeo failed; if this is a permission error, retry with SKOPEO_DIR_MODE=0777 (see scripts/skopeo-dir.sh)." >&2; exit 1; }
 docker load -i "$work/image.tar"
 
 # ${run_args[@]+...}: an empty array is unbound under `set -u` on bash < 4.4.

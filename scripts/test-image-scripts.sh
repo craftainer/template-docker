@@ -127,7 +127,7 @@ EOF_STUB
 chmod +x "$sd/bin/docker"
 skdir_mode() {
     local d
-    d="$(PATH="$sd/bin:$PATH" TMPDIR="$sd" STUB_SECOPTS="$1" bash "$root/scripts/skopeo-dir.sh")" || { echo error; return; }
+    d="$(PATH="$sd/bin:$PATH" TMPDIR="$sd" STUB_SECOPTS="$1" SKOPEO_DIR_MODE="${2:-}" bash "$root/scripts/skopeo-dir.sh" 2>/dev/null)" || { echo error; return; }
     stat -c %a "$d"
     rm -rf "$d"
 }
@@ -135,6 +135,9 @@ expect_eq "skopeo-dir: rootful" 700 "$(skdir_mode 'name=seccomp,profile=builtin 
 expect_eq "skopeo-dir: no daemon" 700 "$(skdir_mode FAIL)"
 expect_eq "skopeo-dir: rootless" 777 "$(skdir_mode 'name=seccomp,profile=builtin name=rootless ')"
 expect_eq "skopeo-dir: userns" 777 "$(skdir_mode 'name=userns ')"
+expect_eq "skopeo-dir: override to 0777" 777 "$(skdir_mode '' 0777)"
+expect_eq "skopeo-dir: override to 0700 beats rootless" 700 "$(skdir_mode 'name=rootless ' 0700)"
+expect_eq "skopeo-dir: invalid override" error "$(skdir_mode '' 0755)"
 
 # Makefile publish/finalize credentials, with docker stubbed (it records its
 # argv and the stdin of any --password-stdin login): the OCI_REGISTRY_* secrets

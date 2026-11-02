@@ -411,7 +411,7 @@ these files over base:
 | `.dockerignore` | `merge` | baseline build-context excludes for the runtime image (including `node_modules`, `coverage`, `target` and `dist`); the instance appends its own |
 | `scripts/image-smoke.sh` | `replace` | loads the image tar from `dist/`, runs it and polls a URL |
 | `scripts/runner-setup.sh` | `replace` | optional: creates the group-0 runtime user and its writable directories for the `runner` stage |
-| `scripts/skopeo-dir.sh` | `replace` | the temp directory for skopeo's container: 0700, or 0777 under rootless/userns Docker |
+| `scripts/skopeo-dir.sh` | `replace` | the temp directory for skopeo's container: 0700, or 0777 under rootless/userns Docker; `SKOPEO_DIR_MODE=0700\|0777` overrides the detection (set 0777 if `publish` or `image-smoke` hit a permission error on Docker Desktop or a remote daemon) |
 | `scripts/image-scan.sh` | `replace` | the Trivy scan the `image-scan` hook runs |
 | `scripts/image-dast.sh` | `replace` | the ZAP baseline scan the `image-dast` hook runs |
 | `.zap/rules.tsv` | `ignore` | the instance's ZAP rule levels, seeded with a commented header |

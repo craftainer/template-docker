@@ -51,6 +51,10 @@
   for `make publish`'s authfile directory and the work directories of
   `image-smoke.sh` and `image-dast.sh`. `image-dast.sh` widens its directory
   to 0777 only after the image tar is gone, because ZAP runs as uid 1000.
+  `SKOPEO_DIR_MODE=0700|0777` overrides the detection (Docker Desktop, remote
+  daemons; anything else is an error). If skopeo fails with a permission
+  error on a 0700 directory, set `SKOPEO_DIR_MODE=0777`; `image-smoke.sh` and
+  `image-dast.sh` say so on failure.
 - `check-dockerfile-versions.sh ARG...` — fails when a named `ARG` default
   differs between `.devcontainer/Dockerfile` and the top-level `Dockerfile`.
 

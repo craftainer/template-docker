@@ -124,7 +124,8 @@ image="image-dast-$RANDOM$RANDOM:dast"
 SKOPEO_DIST_DIR="$tar_dir" bash "$root/scripts/skopeo.sh" -- \
     --override-os linux --override-arch "$arch" \
     copy "oci-archive:/dist/$(basename "$tar")" \
-    "docker-archive:/dist/$(basename "$work")/image.tar:$image"
+    "docker-archive:/dist/$(basename "$work")/image.tar:$image" \
+    || { echo "error: skopeo failed; if this is a permission error, retry with SKOPEO_DIR_MODE=0777 (see scripts/skopeo-dir.sh)." >&2; exit 1; }
 docker load -i "$work/image.tar"
 rm -f "$work/image.tar"
 # 0777 from here on, with the image tar gone: ZAP runs as uid 1000, not the
