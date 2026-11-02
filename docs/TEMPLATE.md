@@ -248,6 +248,19 @@ fail naming the missing secret. Trade-off: the token is in the job env, so every
 target (`build`, `sbom`, `release-assets`), not only `publish`, can write
 those packages.
 
+**Accepted residual: the GHCR push is gated by the branch, not by a
+secret.** With the `OCI_REGISTRY_*` secrets unset, nothing secret stands
+between a `Release` dispatch and the push: whoever can dispatch `Release`
+on a branch can run that branch's `Makefile` with a `packages: write`
+`GITHUB_TOKEN` and publish `ghcr.io/<owner>/<repo>:<version>-<arch>` before
+any review. The control is template-base's `release` environment, whose
+deployment-branch rule allows only the default branch (see template-base's
+[Release environment](https://github.com/craftainer/template-base/blob/main/docs/TEMPLATE.md)
+bullet in `docs/TEMPLATE.md`); it arrives here with the template-base sync
+(template-base#67) and needs no change to the `Makefile`. Until an instance
+has synced and created the environment, treat write access to the repository
+as the right to publish its GHCR image.
+
 **Upgrading a package instance.** Before this contract, `publish` also
 uploaded packages, once per arch. Now `publish` is image-only and gets no
 `*_PUBLISH` variables, secrets or OIDC token. An instance that publishes
@@ -398,6 +411,7 @@ these files over base:
 | `.dockerignore` | `merge` | baseline build-context excludes for the runtime image (including `node_modules`, `coverage`, `target` and `dist`); the instance appends its own |
 | `scripts/image-smoke.sh` | `replace` | loads the image tar from `dist/`, runs it and polls a URL |
 | `scripts/runner-setup.sh` | `replace` | optional: creates the group-0 runtime user and its writable directories for the `runner` stage |
+| `scripts/skopeo-dir.sh` | `replace` | the temp directory for skopeo's container: 0700, or 0777 under rootless/userns Docker |
 | `scripts/image-scan.sh` | `replace` | the Trivy scan the `image-scan` hook runs |
 | `scripts/image-dast.sh` | `replace` | the ZAP baseline scan the `image-dast` hook runs |
 | `.zap/rules.tsv` | `ignore` | the instance's ZAP rule levels, seeded with a commented header |
@@ -440,7 +454,7 @@ defaults) and every variable is `?=`, so set them in `image.mk`:
 | `IMAGE_SMOKE_PORT`, `IMAGE_SMOKE_PATH` | `8000`, `/health/live` | URL polled for a 2xx |
 | `IMAGE_SMOKE_RUN_ARGS`, `IMAGE_SMOKE_TIMEOUT` | empty, `60` | extra `docker run` words, whitespace-separated with no embedded spaces or quotes (passed through the environment); seconds to wait |
 
-`SYFT_VERSION` (the SBOM tool image tag) and `SKOPEO_IMAGE` (tag and
+`SYFT_IMAGE` and `SKOPEO_IMAGE` (the SBOM tool and skopeo, each tag and
 digest) are pinned in the Makefile for Renovate; don't override them. The
 image name comes from `GITHUB_REPOSITORY` (the repository name), never a
 hardcoded one. Inside the devcontainer, where `release-check` runs and

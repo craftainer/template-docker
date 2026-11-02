@@ -32,8 +32,11 @@ IMAGE_SMOKE_PATH ?= /health/live
 IMAGE_SMOKE_RUN_ARGS ?=
 IMAGE_SMOKE_TIMEOUT ?= 60
 
-# renovate: datasource=docker depName=anchore/syft
-SYFT_VERSION := v1.52.0
+# Pinned by tag and digest like SKOPEO_IMAGE; Renovate updates both together
+# (a customManager in .github/renovate.json). The SBOM tool runs as root with
+# dist/ (the image tar) mounted read-write, so a retagged image must not run.
+# Apache-2.0.
+SYFT_IMAGE := anchore/syft:v1.52.0@sha256:500e2d872ac019436926e8322b4fc1f39441d94d21f6f4046c6ff29b30e8cb02
 
 # Pinned by tag and digest; Renovate updates both together. Apache-2.0. The
 # `-immutable` tag, not `vX.Y.Z`: quay.io rebuilds the plain tags daily and
@@ -117,7 +120,7 @@ build: check-arch repo-check
 	$(BUILD) --output type=oci,dest=$(ASSET).tar .
 
 sbom: check-arch repo-check
-	docker run --rm -v "$(CURDIR)/dist:/dist" anchore/syft:$(SYFT_VERSION) \
+	docker run --rm -v "$(CURDIR)/dist:/dist" $(SYFT_IMAGE) \
 		oci-archive:/$(ASSET).tar -o spdx-json=/$(ASSET).spdx.json
 
 # Each arch is smoke-tested here, natively on its own runner, before publish.
@@ -155,7 +158,7 @@ else
 	@$(REPO_GUARD)
 	@test -f $(ASSET).tar || { echo "$(ASSET).tar not found; run 'make build' first." >&2; exit 1; }
 	@$(REGISTRY_CREDS); \
-	auth="$$(mktemp -d)" && chmod 0777 "$$auth" && trap 'rm -rf "$$auth"' EXIT && \
+	auth="$$(bash scripts/skopeo-dir.sh)" && trap 'rm -rf "$$auth"' EXIT && \
 	printf '%s' "$$pass" | bash scripts/skopeo.sh -i -v "$$auth:/auth" -- \
 		login --authfile /auth/auth.json -u "$$user" --password-stdin "$(OCI_REGISTRY)" && \
 	bash scripts/skopeo.sh -v "$$auth:/auth:ro" -- \

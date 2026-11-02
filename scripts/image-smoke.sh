@@ -82,11 +82,9 @@ trap cleanup EXIT
 : "${SKOPEO_IMAGE:?SKOPEO_IMAGE is required (set by the Makefile)}"
 echo "image-smoke: loading $tar (linux/$arch)"
 tar_dir="$(cd "$(dirname "$tar")" && pwd)"
-work="$(mktemp -d "$tar_dir/.image-smoke.XXXXXX")"
-# mktemp makes the directory 0700; with rootless or userns-remapped Docker
-# the container's user can't write into it. It only exists inside dist/, for
-# the length of this script.
-chmod 0777 "$work"
+# 0700 unless rootless or userns-remapped Docker needs 0777 for skopeo's user
+# (see skopeo-dir.sh). It only exists inside dist/, for the length of this script.
+work="$(bash "$(dirname "${BASH_SOURCE[0]}")/skopeo-dir.sh" "$tar_dir/.image-smoke.XXXXXX")"
 # Run (and later remove) a private reference, so cleanup never touches an
 # image that already existed.
 image="image-smoke-$RANDOM$RANDOM:smoke"
@@ -116,7 +114,7 @@ while ((SECONDS < deadline)); do
         echo "image-smoke: container exited before answering" >&2
         exit 1
     fi
-    if curl -fsS -o /dev/null "$url" 2>/dev/null; then
+    if curl -fsS --max-time 5 -o /dev/null "$url" 2>/dev/null; then
         echo "image-smoke: $url answered 2xx"
         exit 0
     fi

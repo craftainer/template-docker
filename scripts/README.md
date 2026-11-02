@@ -43,7 +43,14 @@
   test. Needs `SKOPEO_IMAGE`, which the Makefile exports; usage in the
   script's header.
 - `skopeo.sh` — runs the pinned skopeo image as the caller's user with
-  `dist/` mounted at `/dist`; used by `make publish` and `image-smoke.sh`.
+  `dist/` mounted at `/dist`; used by `make publish`, `image-smoke.sh` and
+  `image-dast.sh`.
+- `skopeo-dir.sh [TEMPLATE]` — prints a new temp directory skopeo's container
+  can write to: 0700 normally, 0777 only when `docker info` reports rootless
+  or userns-remapped Docker (the container's uid then isn't the owner). Used
+  for `make publish`'s authfile directory and the work directories of
+  `image-smoke.sh` and `image-dast.sh`. `image-dast.sh` widens its directory
+  to 0777 only after the image tar is gone, because ZAP runs as uid 1000.
 - `check-dockerfile-versions.sh ARG...` — fails when a named `ARG` default
   differs between `.devcontainer/Dockerfile` and the top-level `Dockerfile`.
 

@@ -2,7 +2,7 @@
 # Offline tests for the template-owned image logic that has no other check:
 # the Makefile's repo derivation, check-dockerfile-versions.sh, image-smoke.sh's
 # missing-tar failure, skopeo.sh's argument handling and image-dast.sh's
-# skip, ZAP wiring and exit-code mapping. Needs no Docker daemon
+# skip, skopeo-dir.sh's mode, ZAP wiring and exit-code mapping. Needs no Docker daemon
 # (docker is stubbed) and writes only to a temp directory. Run by the
 # `image-scripts-test` hook.
 set -euo pipefail
@@ -114,6 +114,28 @@ out="$(sk -- copy a b)" || fail "skopeo.sh: no docker args should work"
 out="$(sk -i -- login)" || fail "skopeo.sh: docker args should work"
 [[ "$out" == *" -i img login" ]] || fail "skopeo.sh: unexpected command: $out"
 
+# skopeo-dir.sh: 0700 on a rootful daemon (or none reachable), 0777 only when
+# `docker info` reports rootless or userns.
+sd="$tmp/skdir"
+mkdir -p "$sd/bin"
+cat >"$sd/bin/docker" <<'EOF_STUB'
+#!/usr/bin/env bash
+[[ "$1" == info ]] || exit 1
+printf '%s' "${STUB_SECOPTS:-}"
+[[ "${STUB_SECOPTS:-}" != FAIL ]] || exit 1
+EOF_STUB
+chmod +x "$sd/bin/docker"
+skdir_mode() {
+    local d
+    d="$(PATH="$sd/bin:$PATH" TMPDIR="$sd" STUB_SECOPTS="$1" bash "$root/scripts/skopeo-dir.sh")" || { echo error; return; }
+    stat -c %a "$d"
+    rm -rf "$d"
+}
+expect_eq "skopeo-dir: rootful" 700 "$(skdir_mode 'name=seccomp,profile=builtin ')"
+expect_eq "skopeo-dir: no daemon" 700 "$(skdir_mode FAIL)"
+expect_eq "skopeo-dir: rootless" 777 "$(skdir_mode 'name=seccomp,profile=builtin name=rootless ')"
+expect_eq "skopeo-dir: userns" 777 "$(skdir_mode 'name=userns ')"
+
 # Makefile publish/finalize credentials, with docker stubbed (it records its
 # argv and the stdin of any --password-stdin login): the OCI_REGISTRY_* secrets
 # win; with them unset ghcr.io falls back to GITHUB_ACTOR/GITHUB_TOKEN; any
@@ -172,7 +194,7 @@ done
 dd="$tmp/dast"
 mkdir -p "$dd/scripts" "$dd/dist" "$dd/.zap" "$dd/bin"
 cp "$root/Makefile" "$dd/"
-cp "$root/scripts/image-dast.sh" "$root/scripts/skopeo.sh" "$dd/scripts/"
+cp "$root/scripts/image-dast.sh" "$root/scripts/skopeo.sh" "$root/scripts/skopeo-dir.sh" "$dd/scripts/"
 printf '# header\n10038\tFAIL\t(CSP)\n' >"$dd/.zap/rules.tsv"
 cat >"$dd/bin/docker" <<'EOF_STUB'
 #!/usr/bin/env bash

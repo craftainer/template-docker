@@ -117,10 +117,9 @@ trap cleanup EXIT
 # shares the workspace but not this process's /tmp).
 echo "image-dast: loading $tar (linux/$arch)"
 tar_dir="$(cd "$(dirname "$tar")" && pwd)"
-work="$(mktemp -d "$tar_dir/.image-dast.XXXXXX")"
-# 0777: the container's user (ZAP runs as uid 1000) must be able to write
-# the reports here, also with rootless or userns-remapped Docker.
-chmod 0777 "$work"
+# Private (0700, or 0777 only under rootless/userns Docker; see skopeo-dir.sh)
+# while it holds the image tar.
+work="$(bash "$root/scripts/skopeo-dir.sh" "$tar_dir/.image-dast.XXXXXX")"
 image="image-dast-$RANDOM$RANDOM:dast"
 SKOPEO_DIST_DIR="$tar_dir" bash "$root/scripts/skopeo.sh" -- \
     --override-os linux --override-arch "$arch" \
@@ -128,6 +127,9 @@ SKOPEO_DIST_DIR="$tar_dir" bash "$root/scripts/skopeo.sh" -- \
     "docker-archive:/dist/$(basename "$work")/image.tar:$image"
 docker load -i "$work/image.tar"
 rm -f "$work/image.tar"
+# 0777 from here on, with the image tar gone: ZAP runs as uid 1000, not the
+# caller, and must be able to write its reports (and read rules.tsv) here.
+chmod 0777 "$work"
 
 # ${run_args[@]+...}: an empty array is unbound under `set -u` on bash < 4.4.
 cid="$(docker run -d -p "127.0.0.1::${port}" ${run_args[@]+"${run_args[@]}"} "$image")"
