@@ -5,10 +5,11 @@
 # host's) selects the arch; RELEASE_VERSION selects dist/*-<version>-<arch>.tar,
 # and when unset the newest dist/*-<arch>.tar is used, so tars of older
 # versions or other arches left in dist/ are never scanned.
-# Advisory by default: findings are printed as a `::warning::` annotation and
-# appended to $GITHUB_STEP_SUMMARY when set, and the exit status stays 0.
-# IMAGE_SCAN_STRICT=1 makes findings fail the run. Trivy errors (no DB, bad
-# tar) fail in both modes. In CI (CI=true) a skip for lack of a tar is also a
+# Findings block locally. When CI=true they are advisory: printed as a
+# `::warning::` annotation and appended to $GITHUB_STEP_SUMMARY when set, exit
+# 0. IMAGE_SCAN_STRICT overrides either way (1 blocks, 0 is advisory); the
+# Makefile passes it through from the environment or image.mk. Trivy errors
+# (no DB, bad tar) fail in every mode. In CI a skip for lack of a tar is also a
 # `::warning::`, since a passing prek hook hides its output.
 # Run by the manual-stage `image-scan` pre-commit hook; needs Docker and
 # network access (the vulnerability DB is cached in the trivy-cache volume).
@@ -58,6 +59,11 @@ fi
 work="$(mktemp -d dist/.image-scan.XXXXXX)"
 trap 'rm -rf "$work"' EXIT
 
+strict="${IMAGE_SCAN_STRICT:-}"
+if [[ -z "$strict" ]]; then
+    if [[ "${CI:-}" == true ]]; then strict=0; else strict=1; fi
+fi
+
 status=0
 for t in "${tars[@]}"; do
     name="$(basename "$t" .tar)"
@@ -85,7 +91,11 @@ for t in "${tars[@]}"; do
     case "$rc" in
         0) ;;
         2)
-            echo "::warning title=image-scan::HIGH/CRITICAL fixable vulnerabilities in $t (linux/$arch); IMAGE_SCAN_STRICT=1 makes this blocking"
+            if [[ "$strict" == 1 ]]; then
+                echo "image-scan: HIGH/CRITICAL fixable vulnerabilities in $t (linux/$arch); IMAGE_SCAN_STRICT=0 makes this advisory" >&2
+            else
+                echo "::warning title=image-scan::HIGH/CRITICAL fixable vulnerabilities in $t (linux/$arch); IMAGE_SCAN_STRICT=1 makes this blocking"
+            fi
             if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
                 {
                     printf '### image-scan: %s (linux/%s)\n\n```\n' "$t" "$arch"
@@ -93,7 +103,7 @@ for t in "${tars[@]}"; do
                     printf '```\n\n'
                 } >>"$GITHUB_STEP_SUMMARY"
             fi
-            if [[ "${IMAGE_SCAN_STRICT:-}" == 1 ]]; then status=1; fi
+            if [[ "$strict" == 1 ]]; then status=1; fi
             ;;
         *) status=1 ;;
     esac

@@ -31,6 +31,8 @@ IMAGE_SMOKE_PORT ?= 8000
 IMAGE_SMOKE_PATH ?= /health/live
 IMAGE_SMOKE_RUN_ARGS ?=
 IMAGE_SMOKE_TIMEOUT ?= 60
+# image-scan: empty = blocking locally, advisory when CI=true; 1 blocks, 0 warns.
+IMAGE_SCAN_STRICT ?=
 
 # Pinned by tag and digest like SKOPEO_IMAGE; Renovate updates both together
 # (a customManager in .github/renovate.json). The SBOM tool runs as root with
@@ -74,7 +76,7 @@ OCI_NAME = $(shell printf '%s' '$(or $(OCI_IMAGE_NAME),$(REPO))' | tr '[:upper:]
 export OCI_DESCRIPTION
 export IMAGE_SMOKE_RUN_ARGS IMAGE_SMOKE_PORT IMAGE_SMOKE_PATH IMAGE_SMOKE_TIMEOUT RELEASE_VERSION
 export IMAGE_TAR_PREFIX = $(ASSET_PREFIX)
-export SKOPEO_IMAGE ARCHES
+export SKOPEO_IMAGE ARCHES IMAGE_SCAN_STRICT
 
 # Only set in CI, by crazy-max/ghaction-github-runtime in release.yml.
 ifdef ACTIONS_RUNTIME_TOKEN

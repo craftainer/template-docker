@@ -220,15 +220,36 @@ out="$(scan_env TRIVY_EXIT=0 RELEASE_VERSION=1.0.0)" || rc=$?
 [[ "$rc" == 0 && "$out" != *"::warning"* ]] || fail "image-scan: clean scan should pass quietly (rc=$rc): $out"
 rc=0
 : >"$sc/summary"
-out="$(scan_env TRIVY_EXIT=2 RELEASE_VERSION=1.0.0 GITHUB_STEP_SUMMARY="$sc/summary")" || rc=$?
-[[ "$rc" == 0 && "$out" == *"::warning title=image-scan::"* ]] || fail "image-scan: findings should warn and pass (rc=$rc): $out"
+out="$(scan_env CI=true TRIVY_EXIT=2 RELEASE_VERSION=1.0.0 GITHUB_STEP_SUMMARY="$sc/summary")" || rc=$?
+[[ "$rc" == 0 && "$out" == *"::warning title=image-scan::"* ]] || fail "image-scan: findings in CI should warn and pass (rc=$rc): $out"
 [[ "$(cat "$sc/summary")" == *"Total: 3"* ]] || fail "image-scan: findings not in the step summary: $(cat "$sc/summary")"
 rc=0
-out="$(scan_env TRIVY_EXIT=2 RELEASE_VERSION=1.0.0 IMAGE_SCAN_STRICT=1)" || rc=$?
-expect_eq "image-scan: strict findings" 1 "$rc"
+out="$(scan_env TRIVY_EXIT=2 RELEASE_VERSION=1.0.0 2>&1)" || rc=$?
+[[ "$rc" == 1 && "$out" != *"::warning"* ]] || fail "image-scan: findings locally should block without an annotation (rc=$rc): $out"
 rc=0
-out="$(scan_env TRIVY_EXIT=1 RELEASE_VERSION=1.0.0)" || rc=$?
+out="$(scan_env TRIVY_EXIT=2 RELEASE_VERSION=1.0.0 IMAGE_SCAN_STRICT=0)" || rc=$?
+expect_eq "image-scan: local findings with IMAGE_SCAN_STRICT=0" 0 "$rc"
+rc=0
+out="$(scan_env CI=true TRIVY_EXIT=2 RELEASE_VERSION=1.0.0 IMAGE_SCAN_STRICT=1)" || rc=$?
+expect_eq "image-scan: CI findings with IMAGE_SCAN_STRICT=1" 1 "$rc"
+rc=0
+out="$(scan_env CI=true TRIVY_EXIT=1 RELEASE_VERSION=1.0.0)" || rc=$?
 expect_eq "image-scan: trivy error" 1 "$rc"
+
+# IMAGE_SCAN_STRICT reaches the scripts through make: from the environment and
+# from image.mk, and `release-assets` runs image-scan and image-dast.
+ms="$tmp/mkstrict"
+mkdir -p "$ms"
+printf 'show:\n\t@echo "[$$IMAGE_SCAN_STRICT]"\n' >"$ms/show.mk"
+out="$(cd "$ms" && env -u IMAGE_SCAN_STRICT GITHUB_REPOSITORY=o/r make -s -f "$root/Makefile" -f show.mk show)"
+expect_eq "make: IMAGE_SCAN_STRICT default" "[]" "$out"
+out="$(cd "$ms" && IMAGE_SCAN_STRICT=1 GITHUB_REPOSITORY=o/r make -s -f "$root/Makefile" -f show.mk show)"
+expect_eq "make: IMAGE_SCAN_STRICT from the environment" "[1]" "$out"
+printf 'IMAGE_SCAN_STRICT := 0\n' >"$ms/image.mk"
+out="$(cd "$ms" && env -u IMAGE_SCAN_STRICT GITHUB_REPOSITORY=o/r make -s -f "$root/Makefile" -f show.mk show)"
+expect_eq "make: IMAGE_SCAN_STRICT from image.mk" "[0]" "$out"
+out="$(cd "$ms" && GITHUB_REPOSITORY=o/r RELEASE_ARCH=amd64 RELEASE_VERSION=1.0.0 ARCHES=amd64 make -n -f "$root/Makefile" release-assets)"
+[[ "$out" == *"bash scripts/image-scan.sh"* && "$out" == *"bash scripts/image-dast.sh"* ]] || fail "make: release-assets should run image-scan and image-dast: $out"
 
 # image-dast.sh in a scratch copy of the repo (it works relative to its own
 # repo root), with docker and curl stubbed: skips without a tar, wires ZAP to

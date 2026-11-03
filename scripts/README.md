@@ -26,8 +26,8 @@
   `runner-setup.d/*.sh`. An instance whose runner image doesn't call it
   (an nginx runner, say) ignores it and `runner-setup.d/`.
 - `image-scan.sh` — the manual-stage `image-scan` hook: Trivy over the
-  tar for the current `RELEASE_VERSION`/arch in `dist/`. Advisory
-  (`::warning::`, `$GITHUB_STEP_SUMMARY`, exit 0) unless `IMAGE_SCAN_STRICT=1`. Also run by
+  tar for the current `RELEASE_VERSION`/arch in `dist/`. Findings block locally; with `CI=true` they are advisory
+  (`::warning::`, `$GITHUB_STEP_SUMMARY`, exit 0). `IMAGE_SCAN_STRICT=1|0` overrides. Also run by
   `make release-assets` with `image-dast.sh`. With `CI=true`, a skip for lack
   of a tar is a `::warning::`.
 - `image-dast.sh` — the manual-stage `image-dast` hook: starts the image from the
