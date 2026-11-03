@@ -16,7 +16,7 @@
 
 -include image.mk
 
-.PHONY: repo-check release-arches build sbom release-assets publish publish-packages verify-published release-check finalize image-smoke check-arch
+.PHONY: repo-check release-arches build sbom release-assets publish publish-packages verify-published release-check finalize image-smoke image-scan image-dast check-arch
 .DEFAULT_GOAL := release-arches
 
 DOCKERFILE ?= Dockerfile

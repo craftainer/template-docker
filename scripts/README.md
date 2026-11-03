@@ -33,7 +33,7 @@
 - `image-dast.sh` — the manual-stage `image-dast` hook: starts the image from the
   tar in `dist/` as `image-smoke.sh` does and runs the pinned ZAP baseline scan
   (passive) in its network namespace, with rule levels from the
-  instance-owned `.zap/rules.tsv`; reports go to `dist/dast/`.
+  instance-owned `.zap/rules.tsv`; reports go to `dist/dast-<arch>-report.{html,json}`.
 - `test-image-scripts.sh` — the `image-scripts-test` hook: offline tests of
   the Makefile's repo derivation, the `publish`/`finalize` registry
   credentials (secrets, the ghcr.io `GITHUB_TOKEN` fallback, the non-ghcr

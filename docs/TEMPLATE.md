@@ -626,8 +626,8 @@ in its `.pre-commit-config.yaml`; ARGs not listed aren't checked.
   the smoke URL, then runs the pinned ZAP baseline image
   (`ghcr.io/zaproxy/zaproxy:<version>@sha256:…`, bumped by Renovate) in the
   app container's network namespace. The scan is passive only (headers,
-  cookies, information leaks; OWASP A02, A07) and writes `dist/dast/report.html` and
-  `report.json`. Rule levels come from the instance-owned `.zap/rules.tsv`
+  cookies, information leaks; OWASP A02, A07) and writes `dist/dast-<arch>-report.html` and
+  `dist/dast-<arch>-report.json` (arch-qualified, so the release assets stay unique per leg). Rule levels come from the instance-owned `.zap/rules.tsv`
   (`id`, `IGNORE|WARN|FAIL`, `(name)`, tab-separated; seeded with a
   commented header and no rules). A rule not listed is a WARN. Exit 0 and 2
   (warnings only) pass; 1 (a rule at FAIL) and 3 (ZAP error) fail. The spider

@@ -203,9 +203,6 @@ echo "Total: 3 (HIGH: 3)"
 exit "${TRIVY_EXIT:-0}"
 EOF_STUB
 chmod +x "$sc/bin/docker"
-scan() {
-    (cd "$sc" && PATH="$sc/bin:$PATH" bash scripts/image-scan.sh "$@")
-}
 scan_env() { (cd "$sc" && env -u CI -u GITHUB_STEP_SUMMARY -u IMAGE_SCAN_STRICT PATH="$sc/bin:$PATH" "$@" bash scripts/image-scan.sh); }
 rc=0
 out="$(scan_env CI=true 2>"$sc/err")" || rc=$?

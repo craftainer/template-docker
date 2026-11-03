@@ -23,7 +23,9 @@
 #
 # ZAP joins the app container's network namespace (`--network container:`),
 # so it reaches the app on 127.0.0.1:PORT and nothing is exposed on the host
-# network. Reports go to dist/dast/ (report.html, report.json).
+# network. Reports go to dist/dast-<arch>-report.{html,json}: flat and
+# arch-qualified, because dist/ is merged across the arch legs and attached to
+# the release.
 #
 # Exit codes of zap-baseline.py (https://www.zaproxy.org/docs/docker/baseline-scan/):
 # 0 nothing found, 2 warnings only: both pass. 1 at least one rule at FAIL,
@@ -180,13 +182,13 @@ docker run --rm --network "container:$cid" -v "$work:/zap/wrk:rw" "$zap" \
     zap-baseline.py "${zap_args[@]}" || zap_status=$?
 
 if [[ -f "$work/report.html" || -f "$work/report.json" ]]; then
-    rm -rf dist/dast
-    mkdir -p dist/dast
+    # Flat and arch-qualified: dist/ is merged across arch legs (assemble_dist.py
+    # rejects one path from two arches) and every file in it is a release asset.
     for f in report.html report.json; do
-        if [[ -f "$work/$f" ]]; then cp "$work/$f" "dist/dast/$f"; fi
+        if [[ -f "$work/$f" ]]; then cp "$work/$f" "dist/dast-$arch-$f"; fi
     done
 fi
-echo "image-dast: reports in dist/dast/"
+echo "image-dast: reports in dist/dast-$arch-report.{html,json}"
 
 case "$zap_status" in
     0) echo "image-dast: no findings" ;;
