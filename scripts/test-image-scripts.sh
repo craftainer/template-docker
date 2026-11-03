@@ -190,6 +190,46 @@ for target in publish finalize; do
     [[ "$(creds_rc)" != 0 && "$out" == *OCI_REGISTRY_PASSWORD* ]] || fail "$target username without password should fail naming OCI_REGISTRY_PASSWORD (rc=$(creds_rc)): $out"
 done
 
+# image-scan.sh with docker stubbed (Trivy's exit code and output come from
+# the environment): findings (2) are advisory by default (a ::warning:: and a
+# job-summary entry, exit 0), IMAGE_SCAN_STRICT=1 makes them fail, a Trivy
+# error (1) always fails, and a skip is a loud warning only when CI=true.
+sc="$tmp/scan"
+mkdir -p "$sc/scripts" "$sc/dist" "$sc/bin"
+cp "$root/scripts/image-scan.sh" "$sc/scripts/"
+cat >"$sc/bin/docker" <<'EOF_STUB'
+#!/usr/bin/env bash
+echo "Total: 3 (HIGH: 3)"
+exit "${TRIVY_EXIT:-0}"
+EOF_STUB
+chmod +x "$sc/bin/docker"
+scan() {
+    (cd "$sc" && PATH="$sc/bin:$PATH" bash scripts/image-scan.sh "$@")
+}
+scan_env() { (cd "$sc" && env -u CI -u GITHUB_STEP_SUMMARY -u IMAGE_SCAN_STRICT PATH="$sc/bin:$PATH" "$@" bash scripts/image-scan.sh); }
+rc=0
+out="$(scan_env CI=true 2>"$sc/err")" || rc=$?
+expect_eq "image-scan: skip exit" 0 "$rc"
+[[ "$out" == *"::warning title=image-scan skipped"* && "$(cat "$sc/err")" == *"nothing was scanned"* ]] || fail "image-scan: CI skip should warn on stdout and stderr: $out"
+out="$(scan_env 2>&1)"
+[[ "$out" != *"::warning"* && "$out" == *skipping* ]] || fail "image-scan: a skip outside CI should not warn: $out"
+printf 'x' >"$sc/manifest.json"
+tar -cf "$sc/dist/app-1.0.0-$host.tar" -C "$sc" manifest.json
+rc=0
+out="$(scan_env TRIVY_EXIT=0 RELEASE_VERSION=1.0.0)" || rc=$?
+[[ "$rc" == 0 && "$out" != *"::warning"* ]] || fail "image-scan: clean scan should pass quietly (rc=$rc): $out"
+rc=0
+: >"$sc/summary"
+out="$(scan_env TRIVY_EXIT=2 RELEASE_VERSION=1.0.0 GITHUB_STEP_SUMMARY="$sc/summary")" || rc=$?
+[[ "$rc" == 0 && "$out" == *"::warning title=image-scan::"* ]] || fail "image-scan: findings should warn and pass (rc=$rc): $out"
+[[ "$(cat "$sc/summary")" == *"Total: 3"* ]] || fail "image-scan: findings not in the step summary: $(cat "$sc/summary")"
+rc=0
+out="$(scan_env TRIVY_EXIT=2 RELEASE_VERSION=1.0.0 IMAGE_SCAN_STRICT=1)" || rc=$?
+expect_eq "image-scan: strict findings" 1 "$rc"
+rc=0
+out="$(scan_env TRIVY_EXIT=1 RELEASE_VERSION=1.0.0)" || rc=$?
+expect_eq "image-scan: trivy error" 1 "$rc"
+
 # image-dast.sh in a scratch copy of the repo (it works relative to its own
 # repo root), with docker and curl stubbed: skips without a tar, wires ZAP to
 # the app container's network and the rules file, and maps zap-baseline.py's
@@ -226,6 +266,9 @@ dast() {
 }
 out="$(dast env)" || fail "image-dast: no tar should skip: $out"
 [[ "$out" == *"skipping"* ]] || fail "image-dast: wrong skip message: $out"
+[[ "$out" != *"::warning"* ]] || fail "image-dast: a skip outside CI should not warn: $out"
+out="$(dast env CI=true)" || fail "image-dast: a CI skip should still pass"
+[[ "$out" == *"::warning title=image-dast skipped"* && "$out" == *$'\n'"image-dast: no linux"*"nothing was scanned" ]] || fail "image-dast: CI skip should warn on stdout and stderr: $out"
 touch "$dd/dist/app-1.0.0-$host.tar"
 for pair in 0:ok 2:ok 1:fail 3:fail; do
     : >"$dd/log"

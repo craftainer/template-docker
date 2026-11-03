@@ -5,6 +5,11 @@
 # host's) selects the arch; RELEASE_VERSION selects dist/*-<version>-<arch>.tar,
 # and when unset the newest dist/*-<arch>.tar is used, so tars of older
 # versions or other arches left in dist/ are never scanned.
+# Advisory by default: findings are printed as a `::warning::` annotation and
+# appended to $GITHUB_STEP_SUMMARY when set, and the exit status stays 0.
+# IMAGE_SCAN_STRICT=1 makes findings fail the run. Trivy errors (no DB, bad
+# tar) fail in both modes. In CI (CI=true) a skip for lack of a tar is also a
+# `::warning::`, since a passing prek hook hides its output.
 # Run by the manual-stage `image-scan` pre-commit hook; needs Docker and
 # network access (the vulnerability DB is cached in the trivy-cache volume).
 #
@@ -39,7 +44,12 @@ else
     if [[ -n "$newest" ]]; then tars=("$newest"); fi
 fi
 if [[ ${#tars[@]} -eq 0 ]]; then
-    echo "image-scan: no linux/$arch image tar in dist/${RELEASE_VERSION:+ for $RELEASE_VERSION}, skipping"
+    msg="image-scan: no linux/$arch image tar in dist/${RELEASE_VERSION:+ for $RELEASE_VERSION}, skipping"
+    echo "$msg"
+    if [[ "${CI:-}" == true ]]; then
+        echo "::warning title=image-scan skipped::$msg; nothing was scanned"
+        echo "$msg; nothing was scanned" >&2
+    fi
     exit 0
 fi
 
@@ -65,8 +75,27 @@ for t in "${tars[@]}"; do
         mount=("$layout:/image:ro")
         input=/image
     fi
+    # --exit-code 2: findings (2) are told apart from Trivy errors (1).
+    rc=0
     docker run --rm -v trivy-cache:/root/.cache -v "${mount[0]}" "$trivy" \
         image --input "$input" --platform "linux/$arch" \
-        --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 || status=1
+        --severity HIGH,CRITICAL --ignore-unfixed --exit-code 2 \
+        >"$work/trivy.out" 2>&1 || rc=$?
+    cat "$work/trivy.out"
+    case "$rc" in
+        0) ;;
+        2)
+            echo "::warning title=image-scan::HIGH/CRITICAL fixable vulnerabilities in $t (linux/$arch); IMAGE_SCAN_STRICT=1 makes this blocking"
+            if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+                {
+                    printf '### image-scan: %s (linux/%s)\n\n```\n' "$t" "$arch"
+                    cat "$work/trivy.out"
+                    printf '```\n\n'
+                } >>"$GITHUB_STEP_SUMMARY"
+            fi
+            if [[ "${IMAGE_SCAN_STRICT:-}" == 1 ]]; then status=1; fi
+            ;;
+        *) status=1 ;;
+    esac
 done
 exit "$status"

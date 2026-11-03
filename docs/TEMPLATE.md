@@ -412,7 +412,7 @@ these files over base:
 | `scripts/image-smoke.sh` | `replace` | loads the image tar from `dist/`, runs it and polls a URL |
 | `scripts/runner-setup.sh` | `replace` | optional: creates the group-0 runtime user and its writable directories for the `runner` stage |
 | `scripts/skopeo-dir.sh` | `replace` | the temp directory for skopeo's container: 0700, or 0777 under rootless/userns Docker; `SKOPEO_DIR_MODE=0700\|0777` overrides the detection (set 0777 if `publish` or `image-smoke` hit a permission error on Docker Desktop or a remote daemon) |
-| `scripts/image-scan.sh` | `replace` | the Trivy scan the `image-scan` hook runs |
+| `scripts/image-scan.sh` | `replace` | the Trivy scan the `image-scan` hook and `release-assets` run (advisory unless `IMAGE_SCAN_STRICT=1`) |
 | `scripts/image-dast.sh` | `replace` | the ZAP baseline scan the `image-dast` hook runs |
 | `.zap/rules.tsv` | `ignore` | the instance's ZAP rule levels, seeded with a commented header |
 | `scripts/test-image-scripts.sh` | `replace` | offline tests of the Makefile and `scripts/` logic, run by the `image-scripts-test` hook |
@@ -509,7 +509,16 @@ instance-tests:
 	uv run pytest --cov-report=xml:dist/coverage.xml
 ```
 
-`release-assets` depends on `image-smoke`, so each arch is booted
+`release-assets` depends on `image-smoke`, `image-scan` and `image-dast`
+(in that order), so each arch is booted, Trivy-scanned (advisory, see the
+`image-scan` hook below) and ZAP-scanned (blocking per `.zap/rules.tsv`)
+natively on its own runner in the build job before `publish`, on the tar
+`make build` just wrote. The hosted runner already has Docker and both
+scanners pull their images by digest (Docker Hub, `ghcr.io`), so
+`release.yml` is unchanged. When `CI=true` and there is no tar for the
+arch, both scripts print a `::warning::` (plus a plain line on stderr,
+because prek hides a passing hook's output) instead of skipping silently.
+`release-check` (the devcontainer run) does not scan. Each arch is booted
 natively on its own runner in the build job before `publish`; the
 `release-check` run inside the devcontainer smoke-tests the host arch
 again with the backing services up. `image-smoke` converts the arch's
@@ -584,9 +593,13 @@ in its `.pre-commit-config.yaml`; ARGs not listed aren't checked.
   `RELEASE_ARCH`, else the host's; without `RELEASE_VERSION`, the newest
   `dist/*-<arch>.tar`), never stale tars of other versions. With no such tar
   it skips. Otherwise `scripts/image-scan.sh` runs a
-  pinned Trivy image on that tar and fails on HIGH or CRITICAL
+  pinned Trivy image on that tar and reports HIGH or CRITICAL
   findings that have a fix (`--severity HIGH,CRITICAL --ignore-unfixed
-  --exit-code 1`). Trivy can't read the OCI-layout tar `make build`
+  --exit-code 2`; Trivy errors exit 1). Findings are advisory: a
+  `::warning::` annotation, an entry in `$GITHUB_STEP_SUMMARY` when set,
+  exit 0. `IMAGE_SCAN_STRICT=1` makes them fail (the instance's choice, set in
+  `image.mk` with `export` or in the workflow env). Trivy errors fail in both
+  modes. Trivy can't read the OCI-layout tar `make build`
   writes, so the script unpacks it and scans the directory, selecting
   `linux/<arch>` from the tar's name so a buildx attestation manifest is
   never scanned instead of the image. The database is cached in the `trivy-cache` Docker

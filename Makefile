@@ -123,8 +123,9 @@ sbom: check-arch repo-check
 	docker run --rm -v "$(CURDIR)/dist:/dist" $(SYFT_IMAGE) \
 		oci-archive:/$(ASSET).tar -o spdx-json=/$(ASSET).spdx.json
 
-# Each arch is smoke-tested here, natively on its own runner, before publish.
-release-assets: check-arch repo-check image-smoke
+# Each arch is smoke-tested, Trivy-scanned and ZAP-scanned here, natively on
+# its own runner, before publish.
+release-assets: check-arch repo-check image-smoke image-scan image-dast
 	test -f $(ASSET).tar && test -f $(ASSET).spdx.json
 
 # Registry credentials for publish and finalize, as shell that sets $user and
@@ -194,6 +195,15 @@ verify-published:
 # image.mk's IMAGE_SMOKE_* values reach the script through the environment.
 image-smoke: repo-check
 	bash scripts/image-smoke.sh
+
+# Run by release-assets (so before publish) on the arch's tar in dist/. Trivy
+# is advisory (warning + job summary) unless IMAGE_SCAN_STRICT=1; ZAP follows
+# .zap/rules.tsv. Both need Docker and pull their pinned images by digest.
+image-scan:
+	bash scripts/image-scan.sh
+
+image-dast:
+	bash scripts/image-dast.sh
 
 # No recipe by design: image.mk adds steps as prerequisites, so Make never
 # sees two recipes for one target. Runs the host-arch smoke test again

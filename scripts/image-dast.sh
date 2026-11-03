@@ -55,7 +55,12 @@ else
     done
 fi
 if [[ -z "$tar" ]]; then
-    echo "image-dast: no linux/$arch image tar in dist/${RELEASE_VERSION:+ for $RELEASE_VERSION}, skipping"
+    msg="image-dast: no linux/$arch image tar in dist/${RELEASE_VERSION:+ for $RELEASE_VERSION}, skipping"
+    echo "$msg"
+    if [[ "${CI:-}" == true ]]; then
+        echo "::warning title=image-dast skipped::$msg; nothing was scanned"
+        echo "$msg; nothing was scanned" >&2
+    fi
     exit 0
 fi
 

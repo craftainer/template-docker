@@ -26,7 +26,10 @@
   `runner-setup.d/*.sh`. An instance whose runner image doesn't call it
   (an nginx runner, say) ignores it and `runner-setup.d/`.
 - `image-scan.sh` — the manual-stage `image-scan` hook: Trivy over the
-  tar for the current `RELEASE_VERSION`/arch in `dist/`.
+  tar for the current `RELEASE_VERSION`/arch in `dist/`. Advisory
+  (`::warning::`, `$GITHUB_STEP_SUMMARY`, exit 0) unless `IMAGE_SCAN_STRICT=1`. Also run by
+  `make release-assets` with `image-dast.sh`. With `CI=true`, a skip for lack
+  of a tar is a `::warning::`.
 - `image-dast.sh` — the manual-stage `image-dast` hook: starts the image from the
   tar in `dist/` as `image-smoke.sh` does and runs the pinned ZAP baseline scan
   (passive) in its network namespace, with rule levels from the
