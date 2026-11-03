@@ -135,7 +135,7 @@ repos:
       # RUST_VERSION) to this entry.
       - id: check-dockerfile-versions
         name: check-dockerfile-versions (ARG defaults match across Dockerfiles)
-        entry: bash scripts/check-dockerfile-versions.sh DEBIAN_VERSION
+        entry: bash scripts/check-dockerfile-versions.sh SSL_CERT_FILE SSL_CERT_DIR
         language: system
         # Also when the check itself, or this entry (the ARG list), changes.
         files: ^((\.devcontainer/)?Dockerfile|scripts/check-dockerfile-versions\.sh|\.pre-commit-config\.yaml)$

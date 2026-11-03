@@ -676,7 +676,7 @@ packages and writable directories there instead of editing the script.
 ### Dockerfile version check
 
 The `check-dockerfile-versions` hook runs
-`scripts/check-dockerfile-versions.sh DEBIAN_VERSION` whenever either
+`scripts/check-dockerfile-versions.sh SSL_CERT_FILE SSL_CERT_DIR` whenever either
 Dockerfile, the script or `.pre-commit-config.yaml` (where the ARG list
 lives) changes: each named ARG must have the same default in
 `.devcontainer/Dockerfile` and `Dockerfile` (the runtime must match the
