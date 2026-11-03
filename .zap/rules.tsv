@@ -6,6 +6,6 @@
 # Add a rule only with a reason in a comment above it. Do not add blanket
 # IGNOREs: that hides findings instead of triaging them.
 #
-# Find rule ids in the scan's output or dist/dast/report.json, e.g.
+# Find rule ids in the scan's output or dist/dast-<arch>-report.json, e.g.
 # 10038 is "Content Security Policy (CSP) Header Not Set":
 # 10038	FAIL	(Content Security Policy (CSP) Header Not Set)

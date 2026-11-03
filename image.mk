@@ -37,6 +37,11 @@
 # IMAGE_SMOKE_RUN_ARGS := -e DATABASE_URL=sqlite:///tmp/x
 # IMAGE_SMOKE_TIMEOUT := 60
 
+# image-scan (Trivy, run by `make release-assets` and the manual hook): HIGH or
+# CRITICAL findings with a fix block locally and are advisory (a warning and a
+# job summary) when CI=true. 1 blocks everywhere, 0 is advisory everywhere.
+# IMAGE_SCAN_STRICT := 1
+
 # Extra release-check steps: add prerequisites here, never a recipe on
 # release-check itself (the Makefile owns that target).
 # release-check: instance-tests

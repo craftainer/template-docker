@@ -248,6 +248,19 @@ fail naming the missing secret. Trade-off: the token is in the job env, so every
 target (`build`, `sbom`, `release-assets`), not only `publish`, can write
 those packages.
 
+**Accepted residual: the GHCR push is gated by the branch, not by a
+secret.** With the `OCI_REGISTRY_*` secrets unset, nothing secret stands
+between a `Release` dispatch and the push: whoever can dispatch `Release`
+on a branch can run that branch's `Makefile` with a `packages: write`
+`GITHUB_TOKEN` and publish `ghcr.io/<owner>/<repo>:<version>-<arch>` before
+any review. The control is template-base's `release` environment, whose
+deployment-branch rule allows only the default branch (see template-base's
+[Release environment](https://github.com/craftainer/template-base/blob/main/docs/TEMPLATE.md)
+bullet in `docs/TEMPLATE.md`); it arrives here with the template-base sync
+(template-base#67) and needs no change to the `Makefile`. Until an instance
+has synced and created the environment, treat write access to the repository
+as the right to publish its GHCR image.
+
 **Upgrading a package instance.** Before this contract, `publish` also
 uploaded packages, once per arch. Now `publish` is image-only and gets no
 `*_PUBLISH` variables, secrets or OIDC token. An instance that publishes
@@ -398,7 +411,8 @@ these files over base:
 | `.dockerignore` | `merge` | baseline build-context excludes for the runtime image (including `node_modules`, `coverage`, `target` and `dist`); the instance appends its own |
 | `scripts/image-smoke.sh` | `replace` | loads the image tar from `dist/`, runs it and polls a URL |
 | `scripts/runner-setup.sh` | `replace` | optional: creates the group-0 runtime user and its writable directories for the `runner` stage |
-| `scripts/image-scan.sh` | `replace` | the Trivy scan the `image-scan` hook runs |
+| `scripts/skopeo-dir.sh` | `replace` | the temp directory for skopeo's container: 0700, or 0777 under rootless/userns Docker; `SKOPEO_DIR_MODE=0700\|0777` overrides the detection (set 0777 if `publish` or `image-smoke` hit a permission error on Docker Desktop or a remote daemon) |
+| `scripts/image-scan.sh` | `replace` | the Trivy scan the `image-scan` hook and `release-assets` run (advisory in CI unless `IMAGE_SCAN_STRICT=1`) |
 | `scripts/image-dast.sh` | `replace` | the ZAP baseline scan the `image-dast` hook runs |
 | `.zap/rules.tsv` | `ignore` | the instance's ZAP rule levels, seeded with a commented header |
 | `scripts/test-image-scripts.sh` | `replace` | offline tests of the Makefile and `scripts/` logic, run by the `image-scripts-test` hook |
@@ -440,7 +454,7 @@ defaults) and every variable is `?=`, so set them in `image.mk`:
 | `IMAGE_SMOKE_PORT`, `IMAGE_SMOKE_PATH` | `8000`, `/health/live` | URL polled for a 2xx |
 | `IMAGE_SMOKE_RUN_ARGS`, `IMAGE_SMOKE_TIMEOUT` | empty, `60` | extra `docker run` words, whitespace-separated with no embedded spaces or quotes (passed through the environment); seconds to wait |
 
-`SYFT_VERSION` (the SBOM tool image tag) and `SKOPEO_IMAGE` (tag and
+`SYFT_IMAGE` and `SKOPEO_IMAGE` (the SBOM tool and skopeo, each tag and
 digest) are pinned in the Makefile for Renovate; don't override them. The
 image name comes from `GITHUB_REPOSITORY` (the repository name), never a
 hardcoded one. Inside the devcontainer, where `release-check` runs and
@@ -495,7 +509,16 @@ instance-tests:
 	uv run pytest --cov-report=xml:dist/coverage.xml
 ```
 
-`release-assets` depends on `image-smoke`, so each arch is booted
+`release-assets` depends on `image-smoke`, `image-scan` and `image-dast`
+(in that order), so each arch is booted, Trivy-scanned (advisory in CI unless
+`IMAGE_SCAN_STRICT=1`, see the `image-scan` hook below) and ZAP-scanned (blocking per `.zap/rules.tsv`)
+natively on its own runner in the build job before `publish`, on the tar
+`make build` just wrote. The hosted runner already has Docker and both
+scanners pull their images by digest (Docker Hub, `ghcr.io`), so
+`release.yml` is unchanged. When `CI=true` and there is no tar for the
+arch, both scripts print a `::warning::` (plus a plain line on stderr,
+because prek hides a passing hook's output) instead of skipping silently.
+`release-check` (the devcontainer run) does not scan. Each arch is booted
 natively on its own runner in the build job before `publish`; the
 `release-check` run inside the devcontainer smoke-tests the host arch
 again with the backing services up. `image-smoke` converts the arch's
@@ -570,9 +593,14 @@ in its `.pre-commit-config.yaml`; ARGs not listed aren't checked.
   `RELEASE_ARCH`, else the host's; without `RELEASE_VERSION`, the newest
   `dist/*-<arch>.tar`), never stale tars of other versions. With no such tar
   it skips. Otherwise `scripts/image-scan.sh` runs a
-  pinned Trivy image on that tar and fails on HIGH or CRITICAL
+  pinned Trivy image on that tar and reports HIGH or CRITICAL
   findings that have a fix (`--severity HIGH,CRITICAL --ignore-unfixed
-  --exit-code 1`). Trivy can't read the OCI-layout tar `make build`
+  --exit-code 2`; Trivy errors exit 1). Locally (the manual hook) findings
+  block. When `CI=true` they are advisory: a `::warning::` annotation, an
+  entry in `$GITHUB_STEP_SUMMARY` when set, exit 0. `IMAGE_SCAN_STRICT`
+  overrides either way (`1` blocks, `0` is advisory); the Makefile exports
+  it, so set it in the environment or as `IMAGE_SCAN_STRICT := 1` in
+  `image.mk`. Trivy errors fail in every mode. Trivy can't read the OCI-layout tar `make build`
   writes, so the script unpacks it and scans the directory, selecting
   `linux/<arch>` from the tar's name so a buildx attestation manifest is
   never scanned instead of the image. The database is cached in the `trivy-cache` Docker
@@ -598,8 +626,8 @@ in its `.pre-commit-config.yaml`; ARGs not listed aren't checked.
   the smoke URL, then runs the pinned ZAP baseline image
   (`ghcr.io/zaproxy/zaproxy:<version>@sha256:…`, bumped by Renovate) in the
   app container's network namespace. The scan is passive only (headers,
-  cookies, information leaks; OWASP A02, A07) and writes `dist/dast/report.html` and
-  `report.json`. Rule levels come from the instance-owned `.zap/rules.tsv`
+  cookies, information leaks; OWASP A02, A07) and writes `dist/dast-<arch>-report.html` and
+  `dist/dast-<arch>-report.json` (arch-qualified, so the release assets stay unique per leg). Rule levels come from the instance-owned `.zap/rules.tsv`
   (`id`, `IGNORE|WARN|FAIL`, `(name)`, tab-separated; seeded with a
   commented header and no rules). A rule not listed is a WARN. Exit 0 and 2
   (warnings only) pass; 1 (a rule at FAIL) and 3 (ZAP error) fail. The spider
