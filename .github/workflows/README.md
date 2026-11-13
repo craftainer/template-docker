@@ -6,6 +6,23 @@
   [`devcontainers/ci`](https://github.com/devcontainers/ci)), under a
   per-run `COMPOSE_PROJECT_NAME` that a final step tears down. Runs as a
   two-leg `amd64`/`arm64` matrix (see "Architecture matrix" below).
+<<<<<<< /home/runner/work/template-docker/template-docker/.github/workflows/README.md
+=======
+  A step before the hooks runs `../scripts/semver_release_type.py` when an
+  instance or downstream template ships it (template-rust-crate does; base
+  does not, so the step is skipped here) and the hooks step forwards its
+  `SEMVER_RELEASE_TYPE` into the container, so a `!`-marked PR title (or, on
+  `main`, head commit subject) runs `cargo semver-checks` as `major`.
+- `smoke.yml` — builds the `runner` stage of the root `Dockerfile` via
+  the root `compose.yml`, starts it against the real Postgres, RustFS,
+  Redis, and Keycloak backing services, and confirms `/health/live` and
+  `/health/ready` both return 200 -- on push, on pull requests, and on
+  demand. Runs as the same two-leg `amd64`/`arm64` matrix as
+  `checks.yml` — this is the check that would actually catch an
+  arch-specific runtime break (e.g. a C-extension dependency missing an
+  arm64 wheel), since `checks.yml`'s test run uses `MODE=mock`
+  in-process fakes for some paths rather than the built image.
+>>>>>>> /tmp/template-new/.github/workflows/README.md
 - `release.yml` — manually triggered, and only from the default branch:
   the `version` job's first step fails on any other ref, and `build`,
   `release` and `publish-packages` repeat the check in their own `if:`.
@@ -42,8 +59,8 @@
   schedule or `workflow_dispatch`, diffs the instance against the
   template's latest tagged release per the manifest's tiers and opens a
   PR — never a direct push, never auto-merged.
-  `template_sync.py apply` exits 0 (clean), 1 (merge conflicts, still
-  opens the PR) or 2 (error, e.g. an unreadable manifest or `git
+  `template_sync.py apply` exits 0 (clean), 1 (merge conflicts: the PR is still
+  opened, as a draft whose body says it needs manual resolution) or 2 (error, e.g. an unreadable manifest or `git
   merge-file` failing): every failure other than conflicts exits 2. A
   binary merge-tier file the instance changed cannot be merged, so it is
   reported as a conflict and the instance's copy is left as it is. A crash before
@@ -53,7 +70,10 @@
   fails the job before the sync state advances. The job then exits with
   `apply`'s own status when that is 2 or higher (so the log and the step's
   exit code tell an error from conflicts) and the summary is printed as valid
-  only after that check.
+  only after that check. The sync never copies Python bytecode
+  (`__pycache__/`, `*.pyc`), and the apply step sets
+  `PYTHONDONTWRITEBYTECODE` so running the script cannot create any in the
+  template checkout.
 
 Every workflow's `runs-on` defaults to `ubuntu-24.04` but can be
 overridden with the `CI_RUNNER` repository/organization variable —
