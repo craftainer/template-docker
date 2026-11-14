@@ -11,17 +11,9 @@
   does not, so the step is skipped here) and the hooks step forwards its
   `SEMVER_RELEASE_TYPE` into the container (the step appends the script's
   output to `$GITHUB_ENV` only if it is empty or exactly
-  `SEMVER_RELEASE_TYPE=<lowercase word>`, failing otherwise), so a `!`-marked PR title (or, on
+  `SEMVER_RELEASE_TYPE=` with an optional `major`, `minor` or `patch`
+  value, failing otherwise), so a `!`-marked PR title (or, on
   `main`, head commit subject) runs `cargo semver-checks` as `major`.
-- `smoke.yml` — builds the `runner` stage of the root `Dockerfile` via
-  the root `compose.yml`, starts it against the real Postgres, RustFS,
-  Redis, and Keycloak backing services, and confirms `/health/live` and
-  `/health/ready` both return 200 -- on push, on pull requests, and on
-  demand. Runs as the same two-leg `amd64`/`arm64` matrix as
-  `checks.yml` — this is the check that would actually catch an
-  arch-specific runtime break (e.g. a C-extension dependency missing an
-  arm64 wheel), since `checks.yml`'s test run uses `MODE=mock`
-  in-process fakes for some paths rather than the built image.
 - `release.yml` — manually triggered, and only from the default branch:
   the `version` job's first step fails on any other ref, and `build`,
   `release` and `publish-packages` repeat the check in their own `if:`.
