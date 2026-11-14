@@ -43,6 +43,8 @@
   tar in `dist/` as `image-smoke.sh` does and runs the pinned ZAP baseline scan
   (passive) in its network namespace, with rule levels from the
   instance-owned `.zap/rules.tsv`; reports go to `dist/dast-<arch>-report.{html,json}`.
+  Outside `make`, an explicitly empty `IMAGE_SMOKE_RUN_ARGS` wins over
+  `image.mk` (see the script's header).
 - `test-image-scripts.sh` — the `image-scripts-test` hook: offline tests of
   the Makefile's repo derivation, the `publish`/`finalize` registry
   credentials (secrets, the ghcr.io `GITHUB_TOKEN` fallback, the non-ghcr

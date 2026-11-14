@@ -14,7 +14,9 @@
 # converts the tar for `docker load`, then `docker run -d -p 127.0.0.1::PORT`.
 # The IMAGE_SMOKE_* settings (port, path, extra run args, timeout) and
 # SKOPEO_IMAGE are read from the environment, or, when this is run outside
-# `make` (the hook), from the Makefile and image.mk.
+# `make` (the hook), from the Makefile and image.mk. Outside make, an
+# explicitly empty IMAGE_SMOKE_RUN_ARGS means "no extra run args" and wins
+# over image.mk.
 #   IMAGE_DAST_PATH         URL path the spider starts from (default:
 #                           IMAGE_SMOKE_PATH)
 #   IMAGE_DAST_SPIDER_MINS  minutes ZAP spiders for (default 1)
@@ -67,7 +69,10 @@ if [[ -z "$tar" ]]; then
 fi
 
 # Outside `make` the smoke settings are not in the environment; ask make for
-# them (it applies the defaults and image.mk). A caller's own values win.
+# them (it applies the defaults and image.mk). A caller's own non-empty values
+# win; RUN_ARGS uses `=` so an empty one is kept too (see the header). This
+# holds only outside make: under `make image-dast`/`release-assets` make
+# exports SKOPEO_IMAGE, this block is skipped and an image.mk `:=` wins.
 if [[ -z "${SKOPEO_IMAGE:-}" ]]; then
     mkfile="$(mktemp)"
     cat >"$mkfile" <<'EOF_MK'
@@ -83,7 +88,7 @@ EOF_MK
         IFS= read -r mk_run_args
         IFS= read -r mk_timeout
     } <<<"$vars"
-    : "${IMAGE_SMOKE_PORT:=$mk_port}" "${IMAGE_SMOKE_PATH:=$mk_path}" "${IMAGE_SMOKE_RUN_ARGS:=$mk_run_args}" "${IMAGE_SMOKE_TIMEOUT:=$mk_timeout}"
+    : "${IMAGE_SMOKE_PORT:=$mk_port}" "${IMAGE_SMOKE_PATH:=$mk_path}" "${IMAGE_SMOKE_RUN_ARGS=$mk_run_args}" "${IMAGE_SMOKE_TIMEOUT:=$mk_timeout}"
 fi
 export SKOPEO_IMAGE
 port="${IMAGE_SMOKE_PORT:-8000}"

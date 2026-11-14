@@ -8,10 +8,17 @@
 set -euo pipefail
 
 # Hermetic: a pre-commit run exports GIT_* (the test inits scratch repos and
-# must never touch the real one), and a release run exports RELEASE_ARCH etc.
+# must never touch the real one), a release run exports RELEASE_ARCH etc., and
+# CI exports CI=true (the scripts' CI-only warnings) and may set the registry.
+# A make caller exports MAKEFLAGS etc. (`make -e` would let the environment
+# beat image.mk), the Makefile reads its `?=` settings from the environment,
+# and ZAP_EXIT/DAST_LOG and TRIVY_EXIT drive the docker and trivy stubs below.
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR RELEASE_ARCH RELEASE_VERSION ARCHES GITHUB_REPOSITORY
 unset IMAGE_SMOKE_PORT IMAGE_SMOKE_PATH IMAGE_SMOKE_TIMEOUT IMAGE_SMOKE_RUN_ARGS IMAGE_TAR_PREFIX SKOPEO_IMAGE
-unset IMAGE_DAST_PATH IMAGE_DAST_SPIDER_MINS IMAGE_DAST_RULES
+unset IMAGE_DAST_PATH IMAGE_DAST_SPIDER_MINS IMAGE_DAST_RULES IMAGE_SCAN_STRICT
+unset CI GITHUB_STEP_SUMMARY OCI_REGISTRY OCI_IMAGE_NAME SKOPEO_DIR_MODE SKOPEO_DIST_DIR
+unset MAKEFLAGS GNUMAKEFLAGS MAKELEVEL MAKEFILES ZAP_EXIT DAST_LOG TRIVY_EXIT RELEASE_TAG
+unset DOCKERFILE TARGET BUILD_ARGS EXTRA_LABELS OCI_DESCRIPTION OCI_LICENSE COVERAGE_REPORT
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
@@ -298,6 +305,36 @@ log="$(cat "$dd/log")"
 [[ "$log" == *"-t http://127.0.0.1:8000/health/live"* ]] || fail "image-dast: wrong ZAP target: $log"
 [[ "$log" == *"-c rules.tsv"* && "$log" == *$'\nrules.tsv'* ]] || fail "image-dast: rules file not passed: $log"
 [[ "$log" != *" -I"* ]] || fail "image-dast: -I would turn FAIL into a pass: $log"
+# Outside make, image.mk's IMAGE_SMOKE_* values apply and a caller's non-empty
+# value wins; with a `:=` image.mk an empty PORT, PATH or TIMEOUT takes
+# image.mk's value (all as on main). An explicitly empty IMAGE_SMOKE_RUN_ARGS
+# means "no extra run args" and wins over image.mk, `:=` or `?=`.
+printf 'IMAGE_SMOKE_PORT := 8080\nIMAGE_SMOKE_PATH := /healthz\nIMAGE_SMOKE_TIMEOUT := 7\nIMAGE_SMOKE_RUN_ARGS := -e FROM_IMAGE_MK=1\n' >"$dd/image.mk"
+: >"$dd/log"
+out="$(dast env)" || fail "image-dast: run with image.mk should pass: $out"
+log="$(cat "$dd/log")"
+[[ "$log" == *"-p 127.0.0.1::8080 -e FROM_IMAGE_MK=1 "* ]] || fail "image-dast: image.mk's IMAGE_SMOKE_PORT/RUN_ARGS not applied: $log"
+[[ "$log" == *"-t http://127.0.0.1:8080/healthz"* ]] || fail "image-dast: image.mk's IMAGE_SMOKE_PATH not applied: $log"
+[[ "$out" == *"waiting up to 7s"* ]] || fail "image-dast: image.mk's IMAGE_SMOKE_TIMEOUT not applied: $out"
+: >"$dd/log"
+out="$(dast env IMAGE_SMOKE_PORT=9000 IMAGE_SMOKE_PATH=/up IMAGE_SMOKE_TIMEOUT=3 IMAGE_SMOKE_RUN_ARGS=-e\ FROM_CALLER=1)" || fail "image-dast: run with caller IMAGE_SMOKE_* should pass: $out"
+log="$(cat "$dd/log")"
+[[ "$log" == *"-p 127.0.0.1::9000 -e FROM_CALLER=1 "* && "$log" == *"-t http://127.0.0.1:9000/up"* && "$out" == *"waiting up to 3s"* ]] || fail "image-dast: a caller's IMAGE_SMOKE_* should win over image.mk outside make: $out $log"
+: >"$dd/log"
+out="$(dast env IMAGE_SMOKE_PORT= IMAGE_SMOKE_PATH= IMAGE_SMOKE_TIMEOUT=)" || fail "image-dast: run with empty IMAGE_SMOKE_PORT/PATH/TIMEOUT should pass: $out"
+log="$(cat "$dd/log")"
+[[ "$log" == *"-p 127.0.0.1::8080 "* && "$log" == *"-t http://127.0.0.1:8080/healthz"* && "$out" == *"waiting up to 7s"* ]] || fail "image-dast: with a := image.mk, an empty IMAGE_SMOKE_PORT/PATH/TIMEOUT should take image.mk's: $out $log"
+: >"$dd/log"
+dast env IMAGE_SMOKE_RUN_ARGS= >/dev/null || fail "image-dast: run with an empty IMAGE_SMOKE_RUN_ARGS should pass"
+[[ "$(cat "$dd/log")" != *"FROM_IMAGE_MK"* ]] || fail "image-dast: an empty IMAGE_SMOKE_RUN_ARGS should win over a := image.mk: $(cat "$dd/log")"
+printf 'IMAGE_SMOKE_RUN_ARGS ?= -e FROM_IMAGE_MK=1\n' >"$dd/image.mk"
+: >"$dd/log"
+dast env >/dev/null || fail "image-dast: run with a ?= image.mk should pass"
+[[ "$(cat "$dd/log")" == *"-e FROM_IMAGE_MK=1"* ]] || fail "image-dast: a ?= image.mk's IMAGE_SMOKE_RUN_ARGS not applied: $(cat "$dd/log")"
+: >"$dd/log"
+dast env IMAGE_SMOKE_RUN_ARGS= >/dev/null || fail "image-dast: run with an empty IMAGE_SMOKE_RUN_ARGS and a ?= image.mk should pass"
+[[ "$(cat "$dd/log")" != *"FROM_IMAGE_MK"* ]] || fail "image-dast: an empty IMAGE_SMOKE_RUN_ARGS should win over a ?= image.mk: $(cat "$dd/log")"
+rm "$dd/image.mk"
 rm "$dd/.zap/rules.tsv"
 : >"$dd/log"
 dast env >/dev/null || fail "image-dast: missing rules file should still run"
