@@ -11,12 +11,14 @@ set -euo pipefail
 # must never touch the real one), a release run exports RELEASE_ARCH etc., and
 # CI exports CI=true (the scripts' CI-only warnings) and may set the registry.
 # A make caller exports MAKEFLAGS etc. (`make -e` would let the environment
-# beat image.mk), and ZAP_EXIT/DAST_LOG drive the docker stub below.
+# beat image.mk), the Makefile reads its `?=` settings from the environment,
+# and ZAP_EXIT/DAST_LOG and TRIVY_EXIT drive the docker and trivy stubs below.
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR RELEASE_ARCH RELEASE_VERSION ARCHES GITHUB_REPOSITORY
 unset IMAGE_SMOKE_PORT IMAGE_SMOKE_PATH IMAGE_SMOKE_TIMEOUT IMAGE_SMOKE_RUN_ARGS IMAGE_TAR_PREFIX SKOPEO_IMAGE
 unset IMAGE_DAST_PATH IMAGE_DAST_SPIDER_MINS IMAGE_DAST_RULES IMAGE_SCAN_STRICT
 unset CI GITHUB_STEP_SUMMARY OCI_REGISTRY OCI_IMAGE_NAME SKOPEO_DIR_MODE SKOPEO_DIST_DIR
-unset MAKEFLAGS MAKELEVEL MAKEFILES ZAP_EXIT DAST_LOG
+unset MAKEFLAGS GNUMAKEFLAGS MAKELEVEL MAKEFILES ZAP_EXIT DAST_LOG TRIVY_EXIT
+unset DOCKERFILE TARGET BUILD_ARGS EXTRA_LABELS OCI_DESCRIPTION OCI_LICENSE COVERAGE_REPORT
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"

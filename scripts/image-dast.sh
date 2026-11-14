@@ -18,7 +18,7 @@
 # non-empty value wins over image.mk's; an empty IMAGE_SMOKE_RUN_ARGS also wins
 # (no extra `docker run` args), while an empty IMAGE_SMOKE_PORT, _PATH or
 # _TIMEOUT takes image.mk's value.
-#   IMAGE_DAST_PATH        URL path the spider starts from (default:
+#   IMAGE_DAST_PATH         URL path the spider starts from (default:
 #                           IMAGE_SMOKE_PATH)
 #   IMAGE_DAST_SPIDER_MINS  minutes ZAP spiders for (default 1)
 #   IMAGE_DAST_RULES        rule levels file (default .zap/rules.tsv, which
