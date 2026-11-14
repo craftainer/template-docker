@@ -14,8 +14,11 @@
 # converts the tar for `docker load`, then `docker run -d -p 127.0.0.1::PORT`.
 # The IMAGE_SMOKE_* settings (port, path, extra run args, timeout) and
 # SKOPEO_IMAGE are read from the environment, or, when this is run outside
-# `make` (the hook), from the Makefile and image.mk.
-#   IMAGE_DAST_PATH         URL path the spider starts from (default:
+# `make` (the hook), from the Makefile and image.mk. Outside make, a caller's
+# non-empty value wins over image.mk's; an empty IMAGE_SMOKE_RUN_ARGS also wins
+# (no extra `docker run` args), while an empty IMAGE_SMOKE_PORT, _PATH or
+# _TIMEOUT takes image.mk's value.
+#   IMAGE_DAST_PATH        URL path the spider starts from (default:
 #                           IMAGE_SMOKE_PATH)
 #   IMAGE_DAST_SPIDER_MINS  minutes ZAP spiders for (default 1)
 #   IMAGE_DAST_RULES        rule levels file (default .zap/rules.tsv, which
@@ -67,8 +70,12 @@ if [[ -z "$tar" ]]; then
 fi
 
 # Outside `make` the smoke settings are not in the environment; ask make for
-# them (it applies the defaults and image.mk). A caller's own values win, an
-# explicitly empty one included (`=`, not `:=`, assigns only when unset).
+# them (it applies the defaults and image.mk). Here, outside make, a caller's
+# non-empty value wins over make's; an empty PORT, PATH or TIMEOUT takes make's
+# (`:=`), while an empty RUN_ARGS is kept (`=`): it means "no extra args".
+# Under `make image-dast`/`release-assets` this block is skipped (make exports
+# SKOPEO_IMAGE) and make's own precedence applies: an image.mk `:=` wins over
+# the environment.
 if [[ -z "${SKOPEO_IMAGE:-}" ]]; then
     mkfile="$(mktemp)"
     cat >"$mkfile" <<'EOF_MK'
@@ -84,7 +91,7 @@ EOF_MK
         IFS= read -r mk_run_args
         IFS= read -r mk_timeout
     } <<<"$vars"
-    : "${IMAGE_SMOKE_PORT=$mk_port}" "${IMAGE_SMOKE_PATH=$mk_path}" "${IMAGE_SMOKE_RUN_ARGS=$mk_run_args}" "${IMAGE_SMOKE_TIMEOUT=$mk_timeout}"
+    : "${IMAGE_SMOKE_PORT:=$mk_port}" "${IMAGE_SMOKE_PATH:=$mk_path}" "${IMAGE_SMOKE_RUN_ARGS=$mk_run_args}" "${IMAGE_SMOKE_TIMEOUT:=$mk_timeout}"
 fi
 export SKOPEO_IMAGE
 port="${IMAGE_SMOKE_PORT:-8000}"
