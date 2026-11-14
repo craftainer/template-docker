@@ -14,10 +14,9 @@
 # converts the tar for `docker load`, then `docker run -d -p 127.0.0.1::PORT`.
 # The IMAGE_SMOKE_* settings (port, path, extra run args, timeout) and
 # SKOPEO_IMAGE are read from the environment, or, when this is run outside
-# `make` (the hook), from the Makefile and image.mk. Outside make, a caller's
-# non-empty value wins over image.mk's; an empty IMAGE_SMOKE_RUN_ARGS also wins
-# (no extra `docker run` args), while an empty IMAGE_SMOKE_PORT, _PATH or
-# _TIMEOUT takes image.mk's value.
+# `make` (the hook), from the Makefile and image.mk. Outside make, an
+# explicitly empty IMAGE_SMOKE_RUN_ARGS means "no extra run args" and wins
+# over image.mk.
 #   IMAGE_DAST_PATH         URL path the spider starts from (default:
 #                           IMAGE_SMOKE_PATH)
 #   IMAGE_DAST_SPIDER_MINS  minutes ZAP spiders for (default 1)
@@ -70,12 +69,10 @@ if [[ -z "$tar" ]]; then
 fi
 
 # Outside `make` the smoke settings are not in the environment; ask make for
-# them (it applies the defaults and image.mk). Here, outside make, a caller's
-# non-empty value wins over make's; an empty PORT, PATH or TIMEOUT takes make's
-# (`:=`), while an empty RUN_ARGS is kept (`=`): it means "no extra args".
-# Under `make image-dast`/`release-assets` this block is skipped (make exports
-# SKOPEO_IMAGE) and make's own precedence applies: an image.mk `:=` wins over
-# the environment.
+# them (it applies the defaults and image.mk). A caller's own non-empty values
+# win; RUN_ARGS uses `=` so an empty one is kept too (see the header). This
+# holds only outside make: under `make image-dast`/`release-assets` make
+# exports SKOPEO_IMAGE, this block is skipped and an image.mk `:=` wins.
 if [[ -z "${SKOPEO_IMAGE:-}" ]]; then
     mkfile="$(mktemp)"
     cat >"$mkfile" <<'EOF_MK'

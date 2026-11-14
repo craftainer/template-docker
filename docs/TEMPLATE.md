@@ -792,7 +792,9 @@ in its `.pre-commit-config.yaml`; ARGs not listed aren't checked.
   `image-scan`, and skips the same way when `dist/` has no tar for the
   current `RELEASE_VERSION`/arch. Otherwise `scripts/image-dast.sh` starts
   the image the way `image-smoke.sh` does (same `IMAGE_SMOKE_*` settings,
-  read from the Makefile and `image.mk` when run outside `make`), waits for
+  read from the Makefile and `image.mk` when run outside `make`, where an
+  explicitly empty `IMAGE_SMOKE_RUN_ARGS` wins over `image.mk`; see the
+  script's header), waits for
   the smoke URL, then runs the pinned ZAP baseline image
   (`ghcr.io/zaproxy/zaproxy:<version>@sha256:…`, bumped by Renovate) in the
   app container's network namespace. The scan is passive only (headers,
