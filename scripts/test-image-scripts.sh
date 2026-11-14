@@ -8,10 +8,12 @@
 set -euo pipefail
 
 # Hermetic: a pre-commit run exports GIT_* (the test inits scratch repos and
-# must never touch the real one), and a release run exports RELEASE_ARCH etc.
+# must never touch the real one), a release run exports RELEASE_ARCH etc., and
+# CI exports CI=true (the scripts' CI-only warnings) and may set the registry.
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE GIT_COMMON_DIR RELEASE_ARCH RELEASE_VERSION ARCHES GITHUB_REPOSITORY
 unset IMAGE_SMOKE_PORT IMAGE_SMOKE_PATH IMAGE_SMOKE_TIMEOUT IMAGE_SMOKE_RUN_ARGS IMAGE_TAR_PREFIX SKOPEO_IMAGE
-unset IMAGE_DAST_PATH IMAGE_DAST_SPIDER_MINS IMAGE_DAST_RULES
+unset IMAGE_DAST_PATH IMAGE_DAST_SPIDER_MINS IMAGE_DAST_RULES IMAGE_SCAN_STRICT
+unset CI GITHUB_STEP_SUMMARY OCI_REGISTRY OCI_IMAGE_NAME SKOPEO_DIR_MODE SKOPEO_DIST_DIR
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d)"
@@ -298,6 +300,16 @@ log="$(cat "$dd/log")"
 [[ "$log" == *"-t http://127.0.0.1:8000/health/live"* ]] || fail "image-dast: wrong ZAP target: $log"
 [[ "$log" == *"-c rules.tsv"* && "$log" == *$'\nrules.tsv'* ]] || fail "image-dast: rules file not passed: $log"
 [[ "$log" != *" -I"* ]] || fail "image-dast: -I would turn FAIL into a pass: $log"
+# Outside make, image.mk's IMAGE_SMOKE_* values apply, but a caller's own
+# value wins, an explicitly empty one included.
+printf 'IMAGE_SMOKE_RUN_ARGS := -e FROM_IMAGE_MK=1\n' >"$dd/image.mk"
+: >"$dd/log"
+dast env >/dev/null || fail "image-dast: run with image.mk should pass"
+[[ "$(cat "$dd/log")" == *"-e FROM_IMAGE_MK=1"* ]] || fail "image-dast: image.mk's IMAGE_SMOKE_RUN_ARGS not applied: $(cat "$dd/log")"
+: >"$dd/log"
+dast env IMAGE_SMOKE_RUN_ARGS= >/dev/null || fail "image-dast: run with an empty IMAGE_SMOKE_RUN_ARGS should pass"
+[[ "$(cat "$dd/log")" != *"FROM_IMAGE_MK"* ]] || fail "image-dast: an explicitly empty IMAGE_SMOKE_RUN_ARGS should win over image.mk: $(cat "$dd/log")"
+rm "$dd/image.mk"
 rm "$dd/.zap/rules.tsv"
 : >"$dd/log"
 dast env >/dev/null || fail "image-dast: missing rules file should still run"

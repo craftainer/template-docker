@@ -67,7 +67,8 @@ if [[ -z "$tar" ]]; then
 fi
 
 # Outside `make` the smoke settings are not in the environment; ask make for
-# them (it applies the defaults and image.mk). A caller's own values win.
+# them (it applies the defaults and image.mk). A caller's own values win, an
+# explicitly empty one included (`=`, not `:=`, assigns only when unset).
 if [[ -z "${SKOPEO_IMAGE:-}" ]]; then
     mkfile="$(mktemp)"
     cat >"$mkfile" <<'EOF_MK'
@@ -83,7 +84,7 @@ EOF_MK
         IFS= read -r mk_run_args
         IFS= read -r mk_timeout
     } <<<"$vars"
-    : "${IMAGE_SMOKE_PORT:=$mk_port}" "${IMAGE_SMOKE_PATH:=$mk_path}" "${IMAGE_SMOKE_RUN_ARGS:=$mk_run_args}" "${IMAGE_SMOKE_TIMEOUT:=$mk_timeout}"
+    : "${IMAGE_SMOKE_PORT=$mk_port}" "${IMAGE_SMOKE_PATH=$mk_path}" "${IMAGE_SMOKE_RUN_ARGS=$mk_run_args}" "${IMAGE_SMOKE_TIMEOUT=$mk_timeout}"
 fi
 export SKOPEO_IMAGE
 port="${IMAGE_SMOKE_PORT:-8000}"

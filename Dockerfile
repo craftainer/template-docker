@@ -6,8 +6,10 @@
 # so `make release-check` has a real image to smoke-test; template-docker
 # releases itself through that contract.
 
-# Also declared in .devcontainer/Dockerfile; scripts/check-dockerfile-versions.sh
-# keeps the two equal.
+# Not checked against the devcontainer: .devcontainer/Dockerfile writes its
+# Debian release literally in its FROM tag (devcontainers/base:trixie), so no
+# ARG exists for scripts/check-dockerfile-versions.sh to compare. Move both to
+# a new Debian release together, by hand.
 ARG DEBIAN_VERSION=trixie
 # Both stages pin the base image by digest as well as tag (the digest is of
 # the multi-arch index); Renovate's dockerfile manager bumps tag and digest.
